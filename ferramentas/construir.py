@@ -55,6 +55,8 @@ def construir_zip(html: Path) -> Path:
         f.write(k / "reuniao.md", f"{PASTA}/.kilo/commands/reuniao.md")
         f.write(k / "reuniao.md", f"{PASTA}/.kilocode/workflows/reuniao.md")
         f.write(k / "AGENTS.md", f"{PASTA}/AGENTS.md")
+        f.write(k / "kilo.jsonc", f"{PASTA}/kilo.jsonc")
+        f.write(k / "Atualizar caderno.bat", f"{PASTA}/Atualizar caderno.bat")
         f.write(k / "COMO-USAR-ESTA-PASTA.md", f"{PASTA}/entrada/COMO-USAR-ESTA-PASTA.md")
         f.writestr(f"{PASTA}/entrada/processadas/", "")
     return z

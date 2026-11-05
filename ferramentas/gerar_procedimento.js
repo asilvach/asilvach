@@ -86,7 +86,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
     <section><h2>Em resumo</h2>
       <p>Depois de preparado (uma vez, 5 minutos), cada reunião são três gestos:</p>
-      <div class="flow"><div><b>1. Teams</b>Transfere a transcrição para a pasta <code>entrada</code>.</div><div><b>2. Kilo Code</b>Escreve <code>/reuniao</code> (ou “atualiza o caderno”) e envia.</div><div><b>3. Caderno</b>Abre-o: a reunião aparece sozinha, com ata, tarefas e o teu Radar.</div></div>
+      <div class="flow"><div><b>1. Teams</b>Transfere a transcrição para a pasta <code>entrada</code>.</div><div><b>2. Kilo Code</b>Duplo clique em <b>Atualizar caderno</b> (ou “atualiza o caderno” no VS Code).</div><div><b>3. Caderno</b>Abre-o: a reunião aparece sozinha, com ata, tarefas e o teu Radar.</div></div>
       <p style="margin-top:4mm">O caderno e o Kilo Code não comunicam diretamente: trocam ficheiros na pasta <code>entrada</code>. O Kilo Code lê a transcrição e escreve a resposta; o caderno importa-a e arruma tudo em <code>entrada/processadas</code>. O caderno não precisa de estar aberto enquanto o Kilo Code trabalha.</p></section>
 
     <section><h2><span class="n">0</span>Preparar (uma vez)</h2>
@@ -100,10 +100,10 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       ${img('ligar', 'Ligar a pasta')}
       <p class="tip">Noutro dia, o Edge pode pedir para <b>Voltar a ligar a pasta</b>. É um clique.</p></section>
 
-    <section><h2><span class="n">0</span>Abrir a pasta no Kilo Code</h2>
-      <ol><li>No VS Code: <b>File</b>, <b>Open Folder…</b> e escolhe a mesma pasta <b>Caderno de Reuniões</b>.</li>
-        <li>Abre o Kilo Code e escreve <code>/</code>: deve aparecer o comando <b>reuniao</b>. Se não aparecer, escreve <code>/reload</code> ou abre uma conversa nova.</li></ol>
-      <p class="tip">É sempre esta pasta que deves ter aberta no VS Code quando usares o <code>/reuniao</code>.</p></section>
+    <section><h2><span class="n">0</span>Escolher como usar o Kilo Code</h2>
+      <table><tr><td>Sem abrir nada (recomendado)</td><td>Na pasta do caderno, faz <b>duplo clique em “Atualizar caderno.bat”</b>. Abre-se uma janela preta: o Kilo Code trata das transcrições novas e, no fim, abre o caderno. Usa o Kilo Code do terminal.</td></tr>
+        <tr><td>No VS Code</td><td><b>File</b>, <b>Open Folder…</b>, a pasta <b>Caderno de Reuniões</b>. No painel do Kilo Code escreve <b>atualiza o caderno</b> (ou <code>/reuniao</code>).</td></tr></table>
+      <p class="tip">Em ambos os casos, o Kilo Code só pode escrever as respostas na pasta <code>entrada</code>: as regras estão no ficheiro <code>kilo.jsonc</code> da pasta.</p></section>
 
     <section class="break"><h2><span class="n">1</span>Guardar a transcrição na pasta entrada</h2>
       <ol><li>No Teams, abre a reunião no <b>Calendário</b> (ou o chat da reunião), <b>Gravações e transcrições</b>.</li>
@@ -113,7 +113,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       ${img('quem', 'Quem és tu?')}</section>
 
     <section><h2><span class="n">2</span>Pedir o resumo ao Kilo Code</h2>
-      <ol><li>No Kilo Code, escreve <code>/reuniao</code> e envia. Também podes escrever “atualiza o caderno”.</li><li>Espera até ele dizer que terminou. Não precisas de copiar nada.</li></ol>
+      <ol><li>Faz <b>duplo clique em “Atualizar caderno.bat”</b> (ou escreve “atualiza o caderno” no Kilo Code do VS Code).</li><li>Espera até terminar. Não precisas de copiar nada.</li></ol>
       <p>Com o caderno aberto, vês o estado na caixa de entrada:</p>
       ${img('pronta', 'Transcrição pronta')}</section>
 
@@ -134,7 +134,9 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       ${img('b1', 'Plano B, passo 1')}${img('b4', 'Plano B, passo 4')}</section>
 
     <section class="break"><h2>Se algo não correr bem</h2><table>
-      <tr><td>O Kilo Code não mostra o /reuniao</td><td>Confirma que abriste a pasta <b>Caderno de Reuniões</b> no VS Code. Escreve <code>/reload</code> ou abre uma conversa nova.</td></tr>
+      <tr><td>“Não encontrei o Kilo Code no terminal”</td><td>O Kilo Code do terminal não está instalado neste PC. Usa o VS Code: abre a pasta e escreve “atualiza o caderno”.</td></tr>
+      <tr><td>“O Kilo Code não conseguiu terminar”</td><td>Abre o Kilo Code nesta pasta (terminal ou VS Code) e escreve “atualiza o caderno”, para veres o que ele pede.</td></tr>
+      <tr><td>O VS Code não mostra o /reuniao</td><td>Confirma que abriste a pasta <b>Caderno de Reuniões</b>. Escreve <code>/reload</code>, ou simplesmente “atualiza o caderno”.</td></tr>
       <tr><td>O Kilo Code diz para abrir o caderno</td><td>Acontece só antes da primeira utilização: abre o caderno no Edge, liga a pasta e volta a escrever <code>/reuniao</code>.</td></tr>
       <tr><td>O caderno mostra “resposta não é válida”</td><td>No Kilo Code, escreve outra vez <code>/reuniao</code>. Ele refaz a resposta.</td></tr>
       <tr><td>“Voltar a ligar a pasta”</td><td>Clica no botão e escolhe <b>Permitir</b>. É uma proteção do Edge.</td></tr>

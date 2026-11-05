@@ -1131,10 +1131,10 @@ function viewHelp() {
     <ol><li>Copia a pasta <b>Caderno de Reuniões</b> do ZIP para o teu OneDrive.</li>
       <li>Abre <b>Caderno de Reuniões.html</b> com o Microsoft Edge e escreve o teu nome.</li>
       <li>Clica em <b>Escolher a pasta do caderno</b> e escolhe essa pasta. Confirma <b>Permitir</b>.</li>
-      <li>No VS Code: <b>File</b>, <b>Open Folder…</b>, a mesma pasta. No Kilo Code, escreve <code>/</code> e confirma que aparece <b>reuniao</b>.</li></ol>
+      <li>Escolhe como vais usar o Kilo Code: <b>duplo clique em “Atualizar caderno.bat”</b> (o mais simples, usa o Kilo Code do terminal) ou, no VS Code, <b>File</b>, <b>Open Folder…</b>, a mesma pasta, e o painel do Kilo Code.</li></ol>
     <h2>Em cada reunião</h2>
     <ol><li>No Teams: reunião, <b>Gravações e transcrições</b>, <b>Transferir</b> (.vtt ou .docx). Guarda em <code>Caderno de Reuniões\entrada</code>.</li>
-      <li>No Kilo Code, escreve <b>/reuniao</b> (ou “atualiza o caderno”) e envia.</li>
+      <li>Duplo clique em <b>Atualizar caderno.bat</b>. No VS Code, escreve “atualiza o caderno” no Kilo Code.</li>
       <li>Abre o caderno: a reunião aparece sozinha. Se o caderno já estiver aberto, aparece uns segundos depois de o Kilo Code terminar.</li></ol>
     <p>O caderno não precisa de estar aberto enquanto o Kilo Code trabalha. Se estiver, prepara antes um pedido com as métricas exatas, que o Kilo Code usa.</p>
     <h2>Plano B: copiar e colar</h2>

@@ -13,15 +13,18 @@ Preparar (uma vez, 5 minutos)
 2. Abre "Caderno de Reuniões.html" com o Microsoft Edge
    (botão direito > Abrir com > Microsoft Edge). Escreve o teu nome.
 3. No caderno, clica em "Escolher a pasta do caderno" e escolhe esta pasta.
-4. No VS Code: File > Open Folder... > esta pasta.
-   No Kilo Code, escreve / e confirma que aparece "reuniao".
+4. Escolhe como vais usar o Kilo Code:
+   - Sem abrir nada: duplo clique em "Atualizar caderno.bat" (usa o Kilo Code
+     do terminal). É o mais simples.
+   - No VS Code: File > Open Folder... > esta pasta, e usa o painel do Kilo Code.
 
 Em cada reunião
 ---------------
 1. Teams > reunião > Gravações e transcrições > Transferir (.vtt ou .docx).
    Guarda o ficheiro na pasta "entrada".
-2. No Kilo Code escreve /reuniao (ou "atualiza o caderno") e envia.
-3. Abre o caderno no Edge: a reunião aparece sozinha.
+2. Duplo clique em "Atualizar caderno.bat".
+   (Ou, no Kilo Code do VS Code, escreve "atualiza o caderno".)
+3. O caderno abre sozinho no fim, com a reunião nova.
 
 Para experimentar: copia o ficheiro da pasta "Exemplo para experimentar"
 para a pasta "entrada".
@@ -29,4 +32,5 @@ para a pasta "entrada".
 Guia completo com imagens: "Procedimento - Caderno de Reuniões.pdf".
 Também está no próprio caderno, em "Como usar".
 
-Não apagues nem alteres: "caderno-dados.json", ".kilo", ".kilocode", "AGENTS.md".
+Não apagues nem alteres: "caderno-dados.json", ".kilo", ".kilocode", "AGENTS.md",
+"kilo.jsonc", "instrucoes-para-o-kilo.md".

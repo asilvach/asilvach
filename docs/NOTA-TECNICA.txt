@@ -19,6 +19,11 @@ O que o ficheiro faz
   Code responde com entrada/NOME.resposta.json (comando /reuniao, definido em
   .kilo/commands/reuniao.md), e o caderno importa e move os ficheiros para
   entrada/processadas. Não há comunicação direta entre o caderno e a IA.
+- "Atualizar caderno.bat": atalho que executa, na pasta do caderno,
+  kilo run "Atualiza o caderno: ..." (Kilo Code CLI, modo não interativo, SEM --auto).
+- "kilo.jsonc" (lido pelo Kilo Code CLI e pela extensão do VS Code) limita o
+  agente nesta pasta: escrita só em entrada/*.resposta.json; bash, webfetch e
+  websearch negados. Sem aprovação automática de permissões.
 - Alternativa sem pasta: o utilizador copia o pedido e cola a resposta à mão.
 - Guarda os dados no armazenamento local do navegador (IndexedDB) e no ficheiro
   caderno-dados.json da pasta escolhida (ex.: OneDrive empresarial).

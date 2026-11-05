@@ -1,0 +1,15 @@
+{
+  // Configuração do Kilo Code para a pasta do Caderno de Reuniões (terminal e VS Code).
+  // Carrega as regras da pasta e limita o que o Kilo Code pode fazer aqui.
+  "instructions": ["AGENTS.md"],
+  "permission": {
+    // Só pode escrever as respostas na pasta entrada. Nunca o caderno nem os dados.
+    "edit": {
+      "*": "deny",
+      "entrada/*.resposta.json": "allow"
+    },
+    "bash": "deny",
+    "webfetch": "deny",
+    "websearch": "deny"
+  }
+}

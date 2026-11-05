@@ -16,6 +16,9 @@ Kilo Code, valida a resposta (JSON) que a pessoa cola de volta e guarda tudo loc
   caderno sempre que guarda: dono, aliases, reuniões recentes, tarefas pendentes com códigos `T-<key>`)
   e a transcrição, e indica `eu_na_transcricao` na resposta. Frases como "atualiza o caderno" fazem o
   mesmo que `/reuniao` (ver `AGENTS.md`).
+  `Atualizar caderno.bat` (duplo clique) corre `kilo run "Atualiza o caderno: …"` na pasta (Kilo CLI,
+  sem `--auto`) e abre o caderno no fim. `kilo.jsonc` (CLI e extensão VS Code) só permite escrever
+  `entrada/*.resposta.json` e nega bash/webfetch/websearch.
 - **Plano B (copiar e colar):** Nova reunião → escolhe o ficheiro e quem é → Copiar pedido → cola no
   Kilo Code → cola a resposta → Guardar reunião.
 - Métricas (tempo de fala, ritmo, bordões, hesitações, interrupções) calculadas em JS a partir
