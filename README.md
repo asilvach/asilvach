@@ -16,8 +16,8 @@ Duas peças:
    ```
    /reuniao transcricoes/2026-11-05-kickoff.vtt ata
    ```
-   Lentes: `ata` (Secretário de Reunião), `destaques`, `dados` (Análise Quantitativa),
-   `conceitos` (Insights de Conceito) ou `auto`. Também podes colar o texto diretamente.
+   Modelos: `ata` (Ata de Reunião / Secretário), `destaques`, `dados` (Dados Quantitativos),
+   `intencao` (Análise de Intenção), `conceitos` (Insights de Conceito) ou `auto`. Também podes colar o texto diretamente.
 3. Atualiza o `caderno_reunioes.html` no navegador (F5) — a reunião nova aparece no topo.
 
 Sem Claude Code? Copia o conteúdo de `.claude/commands/reuniao.md` e substitui `$ARGUMENTS`

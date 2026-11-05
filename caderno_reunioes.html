@@ -164,15 +164,17 @@
 
         const norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
         const slug = s => norm(s).replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
-        const fmtDate = iso => /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').reverse().join('/') : (iso || '');
+        // Aceita AAAA-MM-DD ou DD/MM/AAAA; isoDate() serve para ordenar
+        const isoDate = d => { const m = (d || '').match(/^(\d{1,2})[\/.-](\d{1,2})[\/.-](\d{4})$/); return m ? m[3] + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0') : (d || ''); };
+        const fmtDate = d => { const iso = isoDate(d); return /^\d{4}-\d{2}-\d{2}$/.test(iso) ? iso.split('-').reverse().join('/') : iso; };
 
         function renderMenu() {
             meetings = Array.from(container.querySelectorAll('.meeting-entry'));
             // Mais recente primeiro (data-date em AAAA-MM-DD)
-            meetings.sort((a, b) => (b.dataset.date || '').localeCompare(a.dataset.date || ''));
+            meetings.sort((a, b) => isoDate(b.dataset.date).localeCompare(isoDate(a.dataset.date)));
             meetings.forEach(m => {
                 container.appendChild(m);
-                if (!m.id) m.id = 'r-' + (m.dataset.id || slug((m.dataset.date || '') + '-' + (m.dataset.title || '')));
+                if (!m.id) m.id = 'r-' + (m.dataset.id || slug(isoDate(m.dataset.date) + '-' + (m.dataset.title || '')));
                 m._search = norm([m.dataset.title, m.dataset.type, m.dataset.tags, m.dataset.date, fmtDate(m.dataset.date), m.textContent].join(' '));
                 m._html = m.innerHTML;
             });
