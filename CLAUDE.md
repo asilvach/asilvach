@@ -1,19 +1,29 @@
-# Caderno de Reuniões
+# Caderno de Reuniões · CIO Office Portugal (Natixis)
 
-Sistema pessoal de notas de reuniões: transcrições do Teams → `caderno_reunioes.html`.
+Ferramenta da equipa: transcrições do Teams → um caderno HTML pessoal, offline e pesquisável.
+Cada pessoa tem o seu caderno; o repositório guarda só o modelo e as ferramentas.
 
-- **Nome no Teams:** _(preencher, exatamente como aparece no .vtt)_ — usado no Radar de Comunicação.
-- Para processar uma reunião usa o comando `/reuniao` (definido em `.claude/commands/reuniao.md`).
-- Transcrições em bruto e ficheiros intermédios ficam em `transcricoes/` (fora do git).
+## Comandos
+- `/configurar` — cria ou atualiza o caderno pessoal (nome, nome no Teams). Correr depois de cada `git pull`.
+- `/reuniao <ficheiro.vtt> [ata|destaques|dados|intencao|conceitos]` — processa uma reunião.
 
-## Ferramentas
-- `python3 ferramentas/analisar_vtt.py <ficheiro.vtt> --eu "<Nome>"` → `.limpo.txt` + `.analise.json`
-  (métricas exatas de participação, calculadas pelos timestamps).
-- `python3 ferramentas/injetar.py <artigo.html> --dados <analise.json>` → insere no caderno
-  (valida, junta métricas, remove exemplos, guarda `.bak`).
+## Estrutura
+- `modelo/caderno.html` — o modelo da equipa (design, lógica, 3 reuniões de exemplo). Versionado.
+- `caderno_reunioes.html` e `config.json` — **pessoais**, fora do git.
+- `transcricoes/` — `.vtt`, textos limpos, análises e artigos. Fora do git.
+- `ferramentas/analisar_vtt.py` — métricas exatas por orador a partir dos timestamps.
+- `ferramentas/injetar.py` — insere uma reunião no caderno (valida, junta métricas, cópia `.bak`).
+- `ferramentas/configurar.py` — gera o caderno pessoal a partir do modelo, mantendo as reuniões.
+- `marca/` — logótipo oficial Natixis CIB (reduzido) e a especificação de cores da marca.
 
 ## Regras
-- Nunca editar `caderno_reunioes.html` à mão para inserir reuniões: usar `injetar.py`.
-- Nunca mexer no `<style>` nem no `<script>` do caderno sem pedido explícito.
-- O caderno funciona offline e sem dependências externas (sem CDNs, sem fontes remotas).
-- Testes visuais: Playwright está disponível; verificar desktop, modo escuro e 390px de largura.
+- Nunca adicionar ao git cadernos, transcrições, `config.json` ou conteúdo de reuniões reais.
+- Nunca editar o `caderno_reunioes.html` à mão para inserir reuniões: usar `injetar.py`.
+- Mudanças de design fazem-se em `modelo/caderno.html`; depois `/configurar` aplica-as.
+- O design segue Hallmark (Floor), Web Interface Guidelines, Emil Kowalski (motion) e tokens à
+  shadcn: cores e espaçamentos só por tokens no `:root`; nada de rótulos em maiúsculas
+  espaçadas, "·" a juntar metadados, emojis como ícones, cartões dentro de cartões; animação só
+  para estados (nunca na paleta ⌘K nem ao mudar de vista); `prefers-reduced-motion` respeitado.
+- Cores da marca vêm de `marca/brand-spec.md`, nunca de memória.
+- Offline e sem dependências externas (sem CDNs, sem fontes remotas).
+- Testes visuais: Playwright está disponível; verificar desktop, modo escuro, 320/390/768 px e sem JavaScript.

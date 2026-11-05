@@ -4,3 +4,8 @@ transcricoes/*
 
 # Cópias de segurança do injetar.py
 *.bak
+
+# O caderno e a configuração são PESSOAIS: cada pessoa gera o seu com ferramentas/configurar.py
+caderno_reunioes.html
+config.json
+__pycache__/

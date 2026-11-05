@@ -2,7 +2,7 @@
 """Analisa uma transcrição do Teams (.vtt): limpa o texto e calcula métricas de participação.
 
 Uso:
-    python3 ferramentas/analisar_vtt.py transcricoes/reuniao.vtt --eu "Nome no Teams"
+    python ferramentas/analisar_vtt.py transcricoes/reuniao.vtt [--eu "Nome no Teams"]
 
 Gera, ao lado do ficheiro original:
     reuniao.limpo.txt     transcrição limpa ([hh:mm:ss] Orador: texto), para o Claude ler
@@ -19,6 +19,21 @@ import re
 import sys
 import unicodedata
 from pathlib import Path
+
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:
+        pass
+
+CONFIG_FILE = Path(__file__).resolve().parent.parent / "config.json"
+
+
+def nome_teams_configurado():
+    try:
+        return json.loads(CONFIG_FILE.read_text(encoding="utf-8")).get("teams") or None
+    except (OSError, json.JSONDecodeError):
+        return None
 
 TS_LINE = re.compile(r"((?:\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{1,3})\s+-->\s+((?:\d{1,2}:)?\d{1,2}:\d{2}[.,]\d{1,3})")
 VOICE = re.compile(r"<v(?:\.[^\s>]+)?\s+([^>]+)>(.*?)(?:</v>|$)", re.S)
@@ -200,10 +215,11 @@ def analyse(cues, eu_name=None):
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("vtt", type=Path)
-    ap.add_argument("--eu", help='O teu nome tal como aparece no .vtt (ex.: "Apelido, Nome")')
+    ap.add_argument("--eu", help='O teu nome tal como aparece no .vtt (por omissão, o de config.json)')
     ap.add_argument("--saida", type=Path, help="Prefixo dos ficheiros de saída (por omissão, ao lado do .vtt)")
     a = ap.parse_args()
 
+    a.eu = a.eu or nome_teams_configurado()
     cues = parse_vtt(a.vtt)
     if not cues:
         sys.exit(f"Nenhuma fala encontrada em {a.vtt}. É um .vtt válido?")

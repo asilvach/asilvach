@@ -7,6 +7,7 @@ Uso:
 - Valida o <article> (data-id, data-title, data-date AAAA-MM-DD, data-type).
 - Junta as métricas (.analise.json) ao artigo, como <script type="application/json" class="meeting-data">.
 - Preenche data-duracao e data-participantes a partir das métricas, se faltarem.
+- Cria o caderno a partir de modelo/caderno.html se ainda não existir.
 - Insere logo abaixo do marcador <!-- NOVA_REUNIAO_AQUI e regista o teu nome na config do caderno.
 - Remove as reuniões de exemplo (data-exemplo) na primeira reunião real.
 - Guarda uma cópia de segurança em caderno_reunioes.html.bak.
@@ -20,6 +21,14 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import configurar  # noqa: E402
+
+for _s in (sys.stdout, sys.stderr):
+    try:
+        _s.reconfigure(encoding="utf-8", errors="replace")
+    except AttributeError:
+        pass
 ARTICLE = re.compile(r"<article\b[^>]*\bclass=\"[^\"]*\bmeeting-entry\b[^\"]*\"[^>]*>.*?</article>", re.S)
 MARKER = "<!-- NOVA_REUNIAO_AQUI"
 CONFIG = re.compile(r'(<script type="application/json" id="caderno-config">)(.*?)(</script>)', re.S)
@@ -77,6 +86,9 @@ def main():
     art = new_open + art[len(open_tag):]
 
     cad_path = a.caderno
+    if not cad_path.exists():
+        n, _ = configurar.construir(configurar.ler_config(), cad_path)
+        print(f"(caderno novo criado a partir do modelo: {cad_path.name})")
     cad = cad_path.read_text(encoding="utf-8")
     if MARKER not in cad:
         sys.exit(f"Não encontrei o marcador {MARKER} em {cad_path}.")
