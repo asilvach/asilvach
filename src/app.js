@@ -948,12 +948,12 @@ function renderAll() { renderBrand(); renderNav(); renderList(); renderSaveState
 function ribbon(m) {
   const d = m.data; if (!d?.timeline?.length) return '';
   const col = colorsOf(m), total = d.duracao_s || 1;
-  const rects = d.timeline.map((t, i) => `<rect data-s="${col[t[2]]}" data-turn="${i}" x="${(t[0] / total * 1000).toFixed(1)}" width="${Math.max(1.5, (t[1] - t[0]) / total * 1000).toFixed(1)}" y="0" height="32" style="--c:var(--sp${col[t[2]]})"><title>${esc(displayName(d.oradores[t[2]].nome))}, ${clock(t[0])}, ${fmtDur(t[1] - t[0])}</title></rect>`).join('');
+  const rects = d.timeline.map((t, i) => `<span class="seg" data-s="${col[t[2]]}" data-turn="${i}" style="--x:${(t[0] / total).toFixed(4)};--w:${Math.max(0.0035, (t[1] - t[0]) / total).toFixed(4)};--c:var(--sp${col[t[2]]})" title="${esc(displayName(d.oradores[t[2]].nome))}, ${clock(t[0])}, ${fmtDur(t[1] - t[0])}"></span>`).join('');
   const label = `Quem falou, quando: ${LF.format(d.oradores.map(o => `${displayName(o.nome)} ${pctf(o.pct)}`))}`;
   return `<figure class="ribbon" style="margin-inline:0" data-ribbon>
     <figcaption class="sr-only">${esc(label)}</figcaption>
-    <div class="ribbon-track"><svg viewBox="0 0 1000 32" preserveAspectRatio="none" role="img" aria-label="${esc(label)}">${rects}</svg></div>
-    <div class="ribbon-axis" aria-hidden="true"><span>0</span><span>${clock(total / 2)}</span><span>${clock(total)}</span></div>
+    <div class="ribbon-track" role="img" aria-label="${esc(label)}">${rects}</div>
+    <div class="ribbon-axis" aria-hidden="true"><span>0</span><span>${clock(total / 4)}</span><span>${clock(total / 2)}</span><span>${clock(total * 3 / 4)}</span><span>${clock(total)}</span></div>
     <div class="ribbon-keys">${d.oradores.map((o, i) => `<button type="button" class="ribbon-key" data-focus="${col[i]}" aria-pressed="false"><span class="key" style="--c:var(--sp${col[i]})"></span><span translate="no">${esc(nameOf(o.nome))}</span><b>${pctf(o.pct)}</b></button>`).join('')}</div>
     ${m.aproximado ? '<p class="field-help">Tempos aproximados: a transcrição não tinha a hora de fim de cada fala.</p>' : ''}
   </figure>`;
@@ -963,8 +963,8 @@ function participation(m) {
   const col = colorsOf(m), top = d.oradores[0], eq = d.equilibrio ?? 0;
   const eqLabel = eq >= 80 ? ['ok', 'Equilibrada'] : eq >= 55 ? ['warn', 'Moderada'] : ['bad', `Dominada por ${firstName(top?.nome || '')}`];
   const lanes = d.oradores.map((o, i) => {
-    const rects = d.timeline.filter(t => t[2] === i).map(t => `<rect x="${(t[0] / d.duracao_s * 1000).toFixed(1)}" width="${Math.max(2, (t[1] - t[0]) / d.duracao_s * 1000).toFixed(1)}" y="0" height="14"/>`).join('');
-    return `<span class="lane-name" translate="no">${esc(personLabel(o.nome))}</span><div class="lane" style="--c:var(--sp${col[i]})"><svg viewBox="0 0 1000 14" preserveAspectRatio="none" aria-hidden="true">${rects}</svg></div>`;
+    const rects = d.timeline.filter(t => t[2] === i).map(t => `<i style="--x:${(t[0] / d.duracao_s).toFixed(4)};--w:${Math.max(0.003, (t[1] - t[0]) / d.duracao_s).toFixed(4)}"></i>`).join('');
+    return `<span class="lane-name" translate="no">${esc(personLabel(o.nome))}</span><div class="lane" style="--c:var(--sp${col[i]})" aria-hidden="true">${rects}</div>`;
   }).join('');
   return `<section class="r-sec" aria-labelledby="part-h">
     <h2 id="part-h">Participação</h2>
@@ -1010,8 +1010,10 @@ function lineChart(pts, opt = {}) {
   if (opt.band) { const b0 = opt.band[0] ?? lo, b1 = opt.band[1] ?? hi; band = `<rect class="band" x="${P.l}" width="${W - P.l - P.r}" y="${y(Math.min(hi, b1)).toFixed(1)}" height="${Math.max(0, y(Math.max(lo, b0)) - y(Math.min(hi, b1))).toFixed(1)}" rx="3"/>`; }
   const ref = opt.ref != null ? `<line class="ref" x1="${P.l}" x2="${W - P.r}" y1="${y(opt.ref).toFixed(1)}" y2="${y(opt.ref).toFixed(1)}"/>` : '';
   const f = v => nf(v, v < 10 ? 1 : 0);
+  const gid = 'ga' + (++lineChart.n), base = (H - P.b).toFixed(1);
+  const area = pts.length > 1 ? `<defs><linearGradient id="${gid}" x1="0" y1="0" x2="0" y2="1"><stop offset="0" style="stop-color:var(--brand);stop-opacity:.24"/><stop offset="1" style="stop-color:var(--brand);stop-opacity:0"/></linearGradient></defs><path class="area" fill="url(#${gid})" d="${path}L${x(pts.length - 1).toFixed(1)},${base}L${x(0).toFixed(1)},${base}Z"/>` : '';
   return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="${esc(opt.label || '')}: ${esc(pts.map(p => `${fmtDate(p.date, 'short')}, ${opt.fmt(p.v)}`).join('; '))}">
-    ${band}${ref}
+    ${band}${area}${ref}
     <text class="ax" x="${P.l - 6}" y="${y(hi) + 4}" text-anchor="end">${f(hi)}</text><text class="ax" x="${P.l - 6}" y="${y(lo) + 4}" text-anchor="end">${f(lo)}</text>
     <path class="line" d="${path}"/>
     ${pts.map((p, i) => `<circle class="${i === pts.length - 1 ? 'last' : ''}" cx="${x(i).toFixed(1)}" cy="${y(p.v).toFixed(1)}" r="3.5"><title>${esc(p.title)}, ${fmtDate(p.date, 'short')}: ${opt.fmt(p.v)}</title></circle>`).join('')}
@@ -1019,6 +1021,7 @@ function lineChart(pts, opt = {}) {
     ${pts.length > 1 ? `<text class="ax" x="${x(pts.length - 1)}" y="${H - 6}" text-anchor="end">${fmtDate(pts[pts.length - 1].date, 'short')}</text>` : ''}
   </svg>`;
 }
+lineChart.n = 0;
 const ownerBadge = t => t.owner ? `<span class="badge ${mineTodo(t) ? 'me' : ''}" translate="no">${esc(mineTodo(t) ? 'Eu' : personLabel(t.owner))}</span>` : '';
 const dueBadge = (t, done) => t.due ? `<span class="badge ${!done && t.due < TODAY ? 'bad' : ''}"><span class="sr-only">${!done && t.due < TODAY ? 'Em atraso, prazo ' : 'Prazo '}</span>${fmtDate(t.due, 'short')}</span>` : '';
 const closedNote = t => { const by = t.t.fechada_em && byId.get(t.t.fechada_em); return by ? `<a class="task-closed" href="${meetingHref(by)}">Concluída na reunião de ${fmtDate(by.date, 'short')}</a>` : ''; };
@@ -1720,7 +1723,24 @@ function route() {
   if (!(v === 'r' && words(query).length)) main.scrollTop = 0;
   $('h1', view)?.focus({ preventScroll: true });
   closeNav(); markNav();
-  $('#list .m-item[aria-current="page"]')?.scrollIntoView({ block: 'nearest' });
+  const curItem = $('#list .m-item[aria-current="page"]'), L = $('#list');
+  L.style.paddingBottom = '';
+  if (curItem) {
+    curItem.scrollIntoView({ block: 'nearest' });
+    // Se a lista desceu, alinha o grupo do mês ao topo para nenhuma reunião ficar meio tapada pela etiqueta
+    const g = curItem.closest('[role="group"]');
+    // espera um frame: as alturas dos itens só se acertam depois de pintados (content-visibility)
+    if (g) requestAnimationFrame(() => requestAnimationFrame(() => {
+      if (L.scrollTop <= 0 || g.offsetHeight > L.clientHeight) return;
+      for (let i = 0; i < 3; i++) {
+        const d = g.getBoundingClientRect().top - L.getBoundingClientRect().top;
+        if (d < 1) break;
+        const falta = L.scrollTop + d - (L.scrollHeight - L.clientHeight);
+        if (falta > 0) L.style.paddingBottom = `${parseFloat(getComputedStyle(L).paddingBottom) + falta}px`;
+        L.scrollTop += d;
+      }
+    }));
+  }
 }
 const go = hash => { const target = hash.startsWith('#/r/') ? withState(hash) : hash; if (location.hash === target) route(); else location.hash = target; };
 

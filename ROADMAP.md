@@ -23,6 +23,15 @@ Prioridade = valor no dia a dia ÷ esforço. ✅ feito · 🔜 próximo · 💡 
 | ✅ | Alertas: melancia, deriva, dores crónicas, reaberturas, decisões arrastadas, ações repetidas, convergência, satisfação, hesitação |
 | ✅ | Perguntas para a próxima reunião e relatório para o head |
 
+## v7: acabamento
+
+| | Feature |
+|---|---|
+| ✅ | Botão principal em degradê violeta Natixis, com brilho e sombra tingida; a luz desloca-se no hover |
+| ✅ | Fita de quem falou em cápsulas com brilho, trilho fundo e marcas de tempo a cada quarto |
+| ✅ | Fio de marca no topo, indicador no item ativo, gráficos com área em degradê |
+| ✅ | Lista lateral alinha o mês ao topo para nenhuma reunião ficar meio tapada |
+
 ## v6: novo design
 
 | | Feature |

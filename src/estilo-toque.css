@@ -1,0 +1,142 @@
+
+/* ═══════════════════════════════════════════════════════════════════════════════════════════════
+   Toque v7: acabamento por cima do rework v6.
+   Gradientes só em três sítios com significado: a ação principal, a fita de quem falou e o fio de
+   marca no topo. O resto ganha profundidade com luz (realce interior, sombra tingida), não com cor.
+   Violeta Natixis (h 312) a derivar para magenta (h 335), como no logótipo.
+   ═══════════════════════════════════════════════════════════════════════════════════════════════ */
+:root {
+  --grad-brand: linear-gradient(135deg, oklch(0.440 0.165 318) 0%, oklch(0.366 0.145 312) 48%, oklch(0.300 0.120 300) 100%);
+  --grad-thread: linear-gradient(90deg, oklch(0.366 0.145 312), oklch(0.520 0.190 335) 55%, oklch(0.700 0.160 40));
+  --grad-soft: linear-gradient(135deg, oklch(0.960 0.026 318), oklch(0.975 0.012 340));
+  --glow: oklch(0.366 0.145 312 / .28);
+  --sheen: linear-gradient(180deg, oklch(1 0 0 / .22), oklch(1 0 0 / 0) 55%, oklch(0 0 0 / .06));
+  --lift: 0 1px 0 oklch(1 0 0 / .7) inset, 0 1px 2px oklch(0.2 0.02 312 / .06), 0 4px 12px -6px oklch(0.2 0.03 312 / .14);
+}
+:root[data-theme="dark"] {
+  --grad-brand: linear-gradient(135deg, oklch(0.820 0.100 320) 0%, oklch(0.740 0.120 312) 50%, oklch(0.660 0.130 300) 100%);
+  --grad-thread: linear-gradient(90deg, oklch(0.740 0.110 312), oklch(0.700 0.160 335) 55%, oklch(0.780 0.130 45));
+  --grad-soft: linear-gradient(135deg, oklch(0.270 0.060 318), oklch(0.220 0.030 340));
+  --glow: oklch(0.740 0.110 312 / .30);
+  --sheen: linear-gradient(180deg, oklch(1 0 0 / .16), oklch(1 0 0 / 0) 55%, oklch(0 0 0 / .10));
+  --lift: 0 1px 0 oklch(1 0 0 / .05) inset, 0 1px 2px oklch(0 0 0 / .3), 0 6px 16px -8px oklch(0 0 0 / .6);
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --grad-brand: linear-gradient(135deg, oklch(0.820 0.100 320) 0%, oklch(0.740 0.120 312) 50%, oklch(0.660 0.130 300) 100%);
+    --grad-thread: linear-gradient(90deg, oklch(0.740 0.110 312), oklch(0.700 0.160 335) 55%, oklch(0.780 0.130 45));
+    --grad-soft: linear-gradient(135deg, oklch(0.270 0.060 318), oklch(0.220 0.030 340));
+    --glow: oklch(0.740 0.110 312 / .30);
+    --sheen: linear-gradient(180deg, oklch(1 0 0 / .16), oklch(1 0 0 / 0) 55%, oklch(0 0 0 / .10));
+    --lift: 0 1px 0 oklch(1 0 0 / .05) inset, 0 1px 2px oklch(0 0 0 / .3), 0 6px 16px -8px oklch(0 0 0 / .6);
+  }
+}
+
+/* ── Fio de marca: 3 px no topo da janela, a assinatura Natixis ── */
+#main::before { content: ""; position: sticky; top: 0; z-index: 21; display: block; height: 3px; background: var(--grad-thread); flex-shrink: 0; }
+.topbar { top: 3px; }
+
+/* ── Botões ── */
+.btn { background-image: linear-gradient(180deg, var(--paper), color-mix(in oklch, var(--fill) 55%, var(--paper))); box-shadow: var(--lift); border-color: color-mix(in oklch, var(--line) 80%, var(--edge)); }
+.btn.primary, .chip[aria-pressed="true"], .skip {
+  background: var(--sheen), var(--grad-brand); background-size: 100% 100%, 160% 160%; background-position: 0 0, 0% 50%;
+  border-color: transparent; color: var(--brand-ink);
+  box-shadow: 0 1px 0 oklch(1 0 0 / .25) inset, 0 -1px 0 oklch(0 0 0 / .15) inset, 0 6px 18px -8px var(--glow), 0 1px 2px oklch(0.2 0.03 312 / .2);
+  text-shadow: 0 1px 0 oklch(0 0 0 / .12);
+}
+.topbar .new-btn { border-color: var(--brand-line); color: var(--brand-text); }
+.topbar .new-btn .icon { color: var(--brand-text); }
+.go-btn { background-image: linear-gradient(180deg, var(--paper), color-mix(in oklch, var(--fill) 45%, var(--paper))); box-shadow: 0 1px 0 oklch(1 0 0 / .6) inset; }
+
+/* Seletores segmentados: o escolhido levanta */
+.seg { background: color-mix(in oklch, var(--fill) 85%, var(--line)); box-shadow: 0 1px 2px oklch(0.2 0.02 312 / .08) inset; }
+.seg button[aria-pressed="true"] { box-shadow: var(--lift), 0 0 0 1px var(--line); }
+
+/* Navegação: indicador de marca à esquerda do item ativo */
+.nav a, .m-item { position: relative; }
+.nav a[aria-current="page"]::before, .m-item[aria-current="page"]::before {
+  content: ""; position: absolute; left: -1px; top: 9px; bottom: 9px; width: 3px; border-radius: 0 3px 3px 0; background: var(--grad-brand);
+}
+.nav a[aria-current="page"], .m-item[aria-current="page"] { box-shadow: var(--lift), 0 0 0 1px var(--line); }
+
+/* ── Fita de quem falou: trilho fundo, segmentos em cápsula com brilho ── */
+.ribbon-track { --pad: 5px; height: 48px; padding: 0; border-radius: 14px; background: color-mix(in oklch, var(--fill) 80%, var(--line)); box-shadow: 0 1px 3px oklch(0.2 0.02 312 / .12) inset, 0 0 0 1px var(--line); overflow: hidden; }
+.ribbon-track .seg { position: absolute; top: var(--pad); bottom: var(--pad); left: calc(var(--pad) + (100% - 2 * var(--pad)) * var(--x)); width: calc((100% - 2 * var(--pad)) * var(--w)); min-width: 3px; border-inline: 1px solid transparent; background-clip: padding-box; border-radius: 7px;
+  background-color: var(--c); background-image: linear-gradient(180deg, oklch(1 0 0 / .28), oklch(1 0 0 / 0) 50%, oklch(0 0 0 / .10));
+  box-shadow: 0 1px 0 oklch(1 0 0 / .25) inset; transition: opacity var(--dur-short) var(--ease-in-out), filter var(--dur-short) var(--ease-in-out); }
+.ribbon[data-focus] .seg { opacity: .16; filter: saturate(.4); }
+.ribbon[data-focus="0"] .seg[data-s="0"], .ribbon[data-focus="1"] .seg[data-s="1"], .ribbon[data-focus="2"] .seg[data-s="2"], .ribbon[data-focus="3"] .seg[data-s="3"],
+.ribbon[data-focus="4"] .seg[data-s="4"], .ribbon[data-focus="5"] .seg[data-s="5"], .ribbon[data-focus="6"] .seg[data-s="6"] { opacity: 1; filter: none; }
+@media (hover: hover) and (pointer: fine) { .ribbon-track .seg:hover { filter: brightness(1.08) saturate(1.1); } }
+.ribbon-axis { position: relative; margin-top: var(--s-2); padding: 0 5px; font-size: var(--t-2xs); }
+.ribbon-axis span { position: relative; padding-top: 7px; }
+.ribbon-axis span::before { content: ""; position: absolute; top: 0; left: 50%; width: 1px; height: 4px; background: var(--edge); opacity: .6; }
+.ribbon-axis span:first-child::before { left: 0; } .ribbon-axis span:last-child::before { left: auto; right: 0; }
+.ribbon-key { box-shadow: 0 1px 0 oklch(1 0 0 / .6) inset, 0 1px 2px oklch(0.2 0.02 312 / .05); }
+.ribbon-key .key, .key { width: 10px; height: 10px; border-radius: 50%; background-image: linear-gradient(180deg, oklch(1 0 0 / .35), oklch(1 0 0 / 0) 60%); box-shadow: 0 0 0 3px color-mix(in oklch, var(--c) 18%, transparent); }
+.ribbon-key[aria-pressed="true"] { background: var(--grad-soft); border-color: var(--brand-line); }
+
+/* Pistas por pessoa (Participação) */
+.lane { --pad: 3px; position: relative; height: 16px; border-radius: 8px; background: color-mix(in oklch, var(--fill) 80%, var(--line)); box-shadow: 0 1px 2px oklch(0.2 0.02 312 / .1) inset; }
+.lane i { position: absolute; top: var(--pad); bottom: var(--pad); left: calc(var(--pad) + (100% - 2 * var(--pad)) * var(--x)); width: calc((100% - 2 * var(--pad)) * var(--w)); min-width: 2px; border-radius: 5px; background: var(--c); background-image: linear-gradient(180deg, oklch(1 0 0 / .3), oklch(1 0 0 / 0) 60%); }
+
+/* Barras horizontais (bordões): cápsula com degradê e ponta luminosa */
+.hbar-track { height: 10px; background: color-mix(in oklch, var(--fill) 80%, var(--line)); box-shadow: 0 1px 2px oklch(0.2 0.02 312 / .1) inset; }
+.hbar-track i { background: linear-gradient(90deg, color-mix(in oklch, var(--coral) 55%, var(--paper)), var(--coral)); box-shadow: 0 0 10px -2px color-mix(in oklch, var(--coral) 60%, transparent); }
+
+/* Estado reunião a reunião (RAG) */
+.rag-cell { border-radius: 6px; background-image: linear-gradient(180deg, oklch(1 0 0 / .25), oklch(1 0 0 / 0) 55%, oklch(0 0 0 / .08)); box-shadow: 0 1px 0 oklch(1 0 0 / .2) inset; }
+
+/* Gráficos: linhas com uma sombra da própria cor */
+.chart .mta-line { filter: drop-shadow(0 3px 4px color-mix(in oklch, var(--c) 35%, transparent)); stroke-width: 2.25; stroke-linecap: round; }
+.chart .bar-new { filter: drop-shadow(0 2px 3px oklch(0.2 0.02 312 / .15)); }
+
+/* ── Superfícies com intenção ── */
+.callout { background: var(--grad-soft); box-shadow: 0 0 0 1px color-mix(in oklch, var(--brand-line) 45%, transparent) inset; }
+.tip { background: var(--grad-soft); box-shadow: 0 0 0 1px color-mix(in oklch, var(--brand-line) 45%, transparent) inset; position: relative; overflow: hidden; }
+.tip::before { content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--grad-brand); }
+.radar { border-top: 0; position: relative; }
+.radar::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; border-radius: 2px; background: var(--grad-thread); }
+.stats { position: relative; border-top: 0; }
+.stats::before { content: ""; position: absolute; left: 0; right: 0; top: 0; height: 2px; background: linear-gradient(90deg, var(--brand), color-mix(in oklch, var(--brand) 30%, var(--line)) 40%, var(--line)); }
+.stat-v { background: linear-gradient(180deg, var(--ink), color-mix(in oklch, var(--ink) 70%, var(--brand))); -webkit-background-clip: text; background-clip: text; color: transparent; }
+.badge { box-shadow: 0 0 0 1px color-mix(in oklch, currentColor 14%, transparent) inset; }
+.avatar { background-image: linear-gradient(180deg, oklch(1 0 0 / .25), oklch(1 0 0 / 0) 60%); box-shadow: 0 0 0 2px var(--paper), 0 1px 3px oklch(0.2 0.02 312 / .2); }
+
+/* Início: uma luz ténue de marca atrás do título, sem cartão */
+.page-head:has(.home-h1) { position: relative; isolation: isolate; }
+.page-head:has(.home-h1)::before { content: ""; position: absolute; z-index: -1; left: -10%; top: -60%; width: min(680px, 90vw); height: 320px; background: radial-gradient(closest-side, color-mix(in oklch, var(--brand) 14%, transparent), transparent); pointer-events: none; }
+.home-lead b { background-image: linear-gradient(transparent 66%, color-mix(in oklch, var(--brand) 10%, transparent) 66%); }
+
+/* Passos do assistente: o passo atual ganha borda em degradê */
+.step { box-shadow: var(--lift), 0 0 0 1px var(--line); border-color: transparent; }
+.step:focus-within { border: 1px solid transparent; background: linear-gradient(var(--paper), var(--paper)) padding-box, var(--grad-brand) border-box; }
+
+/* Lista lateral: o mês fixo esbate o que passa por baixo em vez de o cortar a seco */
+.list-label { background: linear-gradient(var(--side) 70%, color-mix(in oklch, var(--side) 0%, transparent)); padding-bottom: var(--s-3); margin-bottom: calc(-1 * var(--s-2)); }
+
+/* Paleta de comandos e avisos */
+#cmdk .cmdk-item[aria-selected="true"] { background: var(--grad-soft); box-shadow: 0 0 0 1px var(--brand-line) inset; }
+.toast { background: var(--sheen), oklch(0.220 0.030 312); box-shadow: 0 10px 30px -10px oklch(0.2 0.05 312 / .5), 0 0 0 1px oklch(1 0 0 / .06) inset; }
+
+/* ── Movimento (Emil Kowalski): a luz desloca-se no hover, nada de saltos ── */
+@media (hover: hover) and (pointer: fine) {
+  .btn.primary, .chip[aria-pressed="true"] { transition: background-position var(--dur-long) var(--ease-out), box-shadow var(--dur-short) var(--ease-out), transform var(--dur-micro) var(--ease-out); }
+  .btn.primary:hover { background: var(--sheen), var(--grad-brand); background-size: 100% 100%, 160% 160%; background-position: 0 0, 100% 50%; box-shadow: 0 1px 0 oklch(1 0 0 / .25) inset, 0 -1px 0 oklch(0 0 0 / .15) inset, 0 10px 24px -8px var(--glow), 0 1px 2px oklch(0.2 0.03 312 / .2); }
+  .btn:not(.primary):hover { border-color: var(--edge); }
+  .topbar .new-btn:hover { background: var(--grad-soft); }
+}
+@media (prefers-reduced-motion: reduce) { .btn.primary, .ribbon-track .seg { transition: none; } }
+
+/* ── Impressão: sem efeitos ── */
+@media print {
+  #main::before, .page-head::before { display: none !important; }
+  .stat-v { color: var(--ink); background: none; }
+}
+
+/* Gráficos de evolução: linha com sombra e área em degradê por baixo */
+.chart .line { stroke-width: 2.25; filter: drop-shadow(0 3px 4px var(--glow)); }
+.chart circle { stroke-width: 2; }
+.chart circle.last { filter: drop-shadow(0 0 4px var(--glow)); }
+.chart .band { opacity: .85; }
+@media (max-width: 60rem) { .go-btn { background-image: none; box-shadow: none; } }

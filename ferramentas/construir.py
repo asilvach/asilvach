@@ -43,9 +43,9 @@ def construir_html() -> Path:
     if "</script" in js.lower():
         raise SystemExit("app.js não pode conter </script>.")
     css = (SRC / "estilo-base.css").read_text(encoding="utf-8") + (SRC / "estilo-caderno.css").read_text(encoding="utf-8")
-    rework = SRC / "estilo-rework.css"
-    if rework.exists():
-        css += rework.read_text(encoding="utf-8")
+    for extra in ("estilo-rework.css", "estilo-toque.css"):
+        if (SRC / extra).exists():
+            css += (SRC / extra).read_text(encoding="utf-8")
     css = css + "\n" + fontes_css()
     exemplos = (SRC / "exemplos.json").read_text(encoding="utf-8").replace("</", "<\\/")
     ex_proj = SRC / "exemplo-projeto.json"

@@ -41,7 +41,7 @@ Kilo Code, valida a resposta (JSON) que a pessoa cola de volta e guarda tudo loc
 - `src/pagina.html` — esqueleto (marcadores `%%CSS%%`, `%%LOGO%%`, `%%EXEMPLOS%%`, `%%JS%%`).
 - `src/app.js` — toda a lógica (leitura de transcrições, métricas, pedido, validação, vistas).
 - `src/estilo-base.css` + `src/estilo-caderno.css` + `src/estilo-rework.css` (v6, sobrepõe tokens e
-  componentes) — design system (tokens no `:root`). O carimbo Hallmark é a 1.ª linha de `estilo-base.css`.
+  componentes) + `src/estilo-toque.css` (v7: gradientes só na ação principal, na fita e no fio de marca) — design system (tokens no `:root`). O carimbo Hallmark é a 1.ª linha de `estilo-base.css`.
 - `marca/fontes/` — Lexend + IBM Plex Sans (OFL); `construir.py` embute-as como data: URIs no fim do CSS.
 - `src/exemplos.json` — 3 reuniões fictícias; `src/exemplos/*.vtt` — transcrição de treino.
 - `docs/` — LEIA-ME, nota técnica para IT, PDF do procedimento; `docs/kilo/` — comando `/reuniao`,
