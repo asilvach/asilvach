@@ -201,74 +201,80 @@ function analyse(turns, euAlias) {
   return { eu: euName, duracao_s: dur, falado_s: falado, equilibrio, oradores, order, timeline: turns.map(t => [t.start - t0, t.end - t0, order[t.speaker]]), t0 };
 }
 
-/* ════════════════ Estado e armazenamento ════════════════ */
-const DEFAULT_STATE = { versao: 1, guardado_em: null, dono: '', aliases: [], equipa: 'CIO Office Portugal', reunioes: [] };
+/* ════════════════ Estado e armazenamento ════════════════
+   Dados: IndexedDB do navegador e, com o modo pasta, o ficheiro caderno-dados.json na pasta do caderno.
+   Modo pasta: o caderno vigia entrada/, prepara um .pedido.md por transcrição e importa o .resposta.json
+   que o Kilo Code lá escreve. */
+const DEFAULT_STATE = { versao: 2, guardado_em: null, dono: '', aliases: [], equipa: 'CIO Office Portugal', modelo_padrao: 'auto', reunioes: [], fila: [], importados: [] };
 let STATE = structuredClone(DEFAULT_STATE);
 let EXEMPLOS = []; try { EXEMPLOS = JSON.parse($('#exemplos').textContent) || []; } catch (e) {}
-let fileHandle = null, filePerm = 'none';
+let dirHandle = null, dirPerm = 'none', inboxBusy = false;
+let INBOX = { aguardar: [], quem: [], erros: [] }; // aguardar: pedidos à espera do Kilo Code; quem: transcrições sem "quem és tu"
+const DATA_FILE = 'caderno-dados.json', INBOX_DIR = 'entrada', DONE_DIR = 'processadas';
+const TRANSCRIPT_RE = /\.(vtt|docx|txt)$/i;
+const FS_OK = 'showDirectoryPicker' in window;
 const idb = (() => {
   let dbp;
   const open = () => dbp || (dbp = new Promise((res, rej) => { const r = indexedDB.open('caderno-cio-office', 1); r.onupgradeneeded = () => r.result.createObjectStore('kv'); r.onsuccess = () => res(r.result); r.onerror = () => rej(r.error); }));
   const op = (mode, fn) => open().then(db => new Promise((res, rej) => { const t = db.transaction('kv', mode), q = fn(t.objectStore('kv')); t.oncomplete = () => res(q.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }));
   return { get: k => op('readonly', s => s.get(k)), set: (k, v) => op('readwrite', s => s.put(v, k)), del: k => op('readwrite', s => s.delete(k)) };
 })();
+const fixState = s => { const st = Object.assign(structuredClone(DEFAULT_STATE), s || {}); if (!Array.isArray(st.fila)) st.fila = []; if (!Array.isArray(st.importados)) st.importados = []; return st; };
 async function loadState() {
   let s = null;
   try { s = await idb.get('estado'); } catch (e) { console.warn('IndexedDB indisponível', e); }
   if (!s) { try { s = JSON.parse(localStorage.getItem('caderno:estado') || 'null'); } catch (e) {} }
-  STATE = Object.assign(structuredClone(DEFAULT_STATE), s || {});
-  try { fileHandle = (await idb.get('ficheiro')) || null; } catch (e) {}
-  if (fileHandle) { try { filePerm = await fileHandle.queryPermission({ mode: 'readwrite' }); } catch (e) { filePerm = 'prompt'; } }
-  if (fileHandle && filePerm === 'granted') await syncFromFile();
+  STATE = fixState(s);
+  try { dirHandle = (await idb.get('pasta')) || null; } catch (e) {}
+  if (dirHandle) { try { dirPerm = await dirHandle.queryPermission({ mode: 'readwrite' }); } catch (e) { dirPerm = 'prompt'; } }
+  if (dirHandle && dirPerm === 'granted') await syncFromFolder();
 }
-async function syncFromFile() {
+async function readJSONFile(dir, name) {
+  try { const fh = await dir.getFileHandle(name); const txt = await (await fh.getFile()).text(); return txt.trim() ? JSON.parse(txt) : null; }
+  catch (e) { if (e.name === 'NotFoundError') return null; throw e; }
+}
+async function writeFile(dir, name, content) { const fh = await dir.getFileHandle(name, { create: true }); const w = await fh.createWritable(); await w.write(content); await w.close(); }
+async function syncFromFolder() {
   try {
-    const f = await fileHandle.getFile(); const txt = await f.text(); if (!txt.trim()) return;
-    const d = JSON.parse(txt);
-    if (d && Array.isArray(d.reunioes) && (!STATE.guardado_em || (d.guardado_em || '') > STATE.guardado_em)) { STATE = Object.assign(structuredClone(DEFAULT_STATE), d); await saveLocal(); }
-  } catch (e) { console.warn('Não foi possível ler o ficheiro de dados', e); }
+    const d = await readJSONFile(dirHandle, DATA_FILE);
+    if (d && Array.isArray(d.reunioes) && (!STATE.guardado_em || (d.guardado_em || '') > STATE.guardado_em)) { STATE = fixState(d); await saveLocal(); }
+  } catch (e) { console.warn('Não foi possível ler o ficheiro de dados', e); toast('O ficheiro caderno-dados.json não pôde ser lido. Os dados deste PC continuam a ser usados.'); }
 }
 async function saveLocal() {
-  try { await idb.set('estado', STATE); } catch (e) { try { localStorage.setItem('caderno:estado', JSON.stringify(STATE)); } catch (e2) { toast('Não foi possível guardar neste navegador. Exporta uma cópia nas Definições.'); } }
+  try { await idb.set('estado', STATE); } catch (e) { try { localStorage.setItem('caderno:estado', JSON.stringify(STATE)); } catch (e2) { toast('Não foi possível guardar neste navegador. Liga a pasta do caderno ou exporta uma cópia.'); } }
 }
 async function persist(msg) {
   STATE.guardado_em = new Date().toISOString();
   await saveLocal();
-  if (fileHandle && filePerm === 'granted') {
-    try { const w = await fileHandle.createWritable(); await w.write(JSON.stringify(STATE)); await w.close(); }
-    catch (e) { filePerm = 'prompt'; }
-  }
+  if (dirHandle && dirPerm === 'granted') { try { await writeFile(dirHandle, DATA_FILE, JSON.stringify(STATE)); } catch (e) { dirPerm = 'prompt'; } }
   renderSaveState(); if (msg) toast(msg);
 }
 function renderSaveState() {
   const el = $('#save-state');
   const when = STATE.guardado_em ? DTF.time.format(new Date(STATE.guardado_em)) : null;
-  if (fileHandle && filePerm !== 'granted') { el.innerHTML = '<a href="#/definicoes">Volta a ligar o ficheiro de dados</a>'; el.className = 'save-state warn'; return; }
+  if (dirHandle && dirPerm !== 'granted') { el.innerHTML = '<button class="btn-link" type="button" data-action="relink" style="border:0;background:none;padding:0">Clica para voltar a ligar a pasta</button>'; el.className = 'save-state warn'; return; }
   el.className = 'save-state';
-  el.textContent = fileHandle ? `Guardado no ficheiro${when ? ' às ' + when : ''}` : (when ? `Guardado neste PC às ${when}` : 'Offline. Tudo fica neste computador.');
+  el.textContent = dirHandle ? `Pasta ${dirHandle.name}${when ? ', guardado às ' + when : ''}` : (when ? `Guardado neste PC às ${when}` : 'Offline. Tudo fica neste computador.');
 }
-const FS_OK = 'showSaveFilePicker' in window;
-async function linkNewFile() {
+async function connectFolder() {
   try {
-    const h = await window.showSaveFilePicker({ suggestedName: 'caderno-reunioes-dados.json', types: [{ description: 'Dados do caderno', accept: { 'application/json': ['.json'] } }] });
-    fileHandle = h; filePerm = 'granted'; await idb.set('ficheiro', h); await persist('Ficheiro de dados ligado. A partir de agora tudo fica guardado nele.'); render();
-  } catch (e) { if (e.name !== 'AbortError') toast('Não foi possível ligar o ficheiro: ' + e.message); }
+    const h = await window.showDirectoryPicker({ id: 'caderno-reunioes', mode: 'readwrite' });
+    if ((await h.queryPermission({ mode: 'readwrite' })) !== 'granted' && (await h.requestPermission({ mode: 'readwrite' })) !== 'granted') return;
+    dirHandle = h; dirPerm = 'granted'; await idb.set('pasta', h);
+    await (await h.getDirectoryHandle(INBOX_DIR, { create: true })).getDirectoryHandle(DONE_DIR, { create: true });
+    const d = await readJSONFile(h, DATA_FILE).catch(() => null);
+    if (d && Array.isArray(d.reunioes) && d.reunioes.length) {
+      const extra = STATE.reunioes.filter(r => !d.reunioes.some(x => x.id === r.id));
+      STATE = fixState(d); STATE.reunioes.push(...extra);
+    }
+    await persist(`Pasta ${h.name} ligada. Põe as transcrições em ${INBOX_DIR}.`); rebuild(); renderAll(); scanInbox();
+  } catch (e) { if (e.name !== 'AbortError') toast('Não foi possível ligar a pasta: ' + e.message); }
 }
-async function openExistingFile() {
-  try {
-    const [h] = await window.showOpenFilePicker({ types: [{ description: 'Dados do caderno', accept: { 'application/json': ['.json'] } }] });
-    if ((await h.requestPermission({ mode: 'readwrite' })) !== 'granted') return;
-    const d = JSON.parse(await (await h.getFile()).text());
-    if (!d || !Array.isArray(d.reunioes)) throw new Error('Este ficheiro não é um ficheiro de dados do caderno.');
-    fileHandle = h; filePerm = 'granted'; await idb.set('ficheiro', h);
-    STATE = Object.assign(structuredClone(DEFAULT_STATE), d); await saveLocal(); rebuild(); renderSaveState(); toast('Ficheiro de dados aberto.'); go('#/');
-  } catch (e) { if (e.name !== 'AbortError') toast(e.message); }
-}
-async function relinkFile() {
-  try { filePerm = await fileHandle.requestPermission({ mode: 'readwrite' }); if (filePerm === 'granted') { await syncFromFile(); rebuild(); await persist('Ficheiro de dados ligado.'); render(); } }
+async function relinkFolder() {
+  try { dirPerm = await dirHandle.requestPermission({ mode: 'readwrite' }); if (dirPerm === 'granted') { await syncFromFolder(); rebuild(); await persist('Pasta ligada.'); renderAll(); scanInbox(); } else renderSaveState(); }
   catch (e) { toast('Não foi possível voltar a ligar: ' + e.message); }
 }
-async function unlinkFile() { fileHandle = null; filePerm = 'none'; try { await idb.del('ficheiro'); } catch (e) {} renderSaveState(); render(); toast('O caderno deixou de gravar no ficheiro. Os dados continuam neste PC.'); }
+async function unlinkFolder() { dirHandle = null; dirPerm = 'none'; INBOX = { aguardar: [], quem: [], erros: [] }; try { await idb.del('pasta'); } catch (e) {} renderAll(); toast('O caderno deixou de usar a pasta. Os dados continuam neste PC.'); }
 function exportData() {
   const blob = new Blob([JSON.stringify(STATE, null, 1)], { type: 'application/json' });
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `caderno-reunioes-copia-${TODAY}.json`; document.body.append(a); a.click(); a.remove();
@@ -282,9 +288,126 @@ async function importData(file) {
     d.reunioes.forEach(r => { if (!ids.has(r.id)) { STATE.reunioes.push(r); n++; } });
     if (!STATE.dono && d.dono) STATE.dono = d.dono;
     STATE.aliases = [...new Set([...(STATE.aliases || []), ...(d.aliases || [])])];
-    await persist(`${plural(n, 'reunião importada', 'reuniões importadas')}.`); rebuild(); render();
+    await persist(`${plural(n, 'reunião importada', 'reuniões importadas')}.`); rebuild(); renderAll();
   } catch (e) { toast(e.message); }
 }
+
+/* ── Caixa de entrada (modo pasta) ── */
+const baseName = n => n.replace(/\.(vtt|docx|txt|pedido\.md|resposta\.json|erro\.txt)$/i, '');
+const dateFromFile = (name, lastModified) => { const m = name.match(/(\d{4})[-_.](\d{2})[-_.](\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]}` : (lastModified ? localISO(new Date(lastModified)) : TODAY); };
+function prepareJob({ cues, aproximado, fonte, alias, date, modelo, nome }) {
+  const turns = mergeTurns(cues), data = analyse(turns, alias);
+  const job = { cues, turns, data, alias, date, modelo, aproximado, fonte, ficheiro: nome, related: [], pendentes: [] };
+  if (!usingExamples()) {
+    job.related = relatedOf({ id: '__nova__', people: data ? data.oradores.map(o => o.nome) : [], tags: [], date }, 3);
+    const since = addDays(date, -90);
+    job.pendentes = allTodos.filter(t => !isDone(t) && !t.m.exemplo && (t.m.date || '') >= since && (t.m.date || '') <= date).slice(0, 25).map((t, i) => ({ code: 'T' + (i + 1), t }));
+  }
+  return job;
+}
+function recordFromJob(job, p) {
+  const names = job.data ? job.data.oradores.map(o => o.nome) : [...new Set(job.turns.map(t => t.speaker))];
+  const order = Object.fromEntries(names.map((n, i) => [n, i]));
+  const tipo = p.tipo || (MODELOS[job.modelo] || MODELOS.ata).nome;
+  return {
+    id: `${job.date}-${slug(p.titulo || 'reuniao')}-${uid().slice(-4)}`, criado_em: new Date().toISOString(), data: job.date, tipo, fonte: job.fonte, aproximado: job.aproximado, eu: job.alias || null, ficheiro: job.ficheiro || null,
+    oradores: names, falas: job.turns.map(t => [+t.start.toFixed(2), +t.end.toFixed(2), order[t.speaker], t.text, +t.spoken.toFixed(2)]), conteudo: p, notas: '',
+  };
+}
+function closePending(p, codes, recId) {
+  for (const code of p.tarefas_concluidas || []) {
+    const key = codes[code]; const t = key && allTodos.find(x => x.key === key);
+    if (t) { t.t.feito = true; t.t.fechada_em = recId; }
+  }
+}
+function rememberAlias(alias) { if (alias && !(STATE.aliases || []).some(a => samePerson(a, alias))) STATE.aliases = [...(STATE.aliases || []), alias]; }
+async function fileFromInbox(inbox, name) { return (await inbox.getFileHandle(name)).getFile(); }
+async function moveToDone(inbox, names) {
+  const done = await inbox.getDirectoryHandle(DONE_DIR, { create: true });
+  for (const n of names) {
+    try { const f = await fileFromInbox(inbox, n); await writeFile(done, n, await f.arrayBuffer()); await inbox.removeEntry(n); }
+    catch (e) { console.warn('Não foi possível mover', n, e.name, e.message); }
+  }
+}
+async function scanInbox() {
+  if (!dirHandle || dirPerm !== 'granted' || inboxBusy) return;
+  inboxBusy = true;
+  const before = JSON.stringify(INBOX);
+  try {
+    const inbox = await dirHandle.getDirectoryHandle(INBOX_DIR, { create: true });
+    const files = new Map();
+    for await (const [name, h] of inbox.entries()) if (h.kind === 'file' && !/^(~\$|\.)/.test(name)) files.set(name, h);
+    const bases = new Map();
+    for (const name of files.keys()) { const b = baseName(name); if (!bases.has(b)) bases.set(b, {}); const o = bases.get(b);
+      if (/\.erro\.txt$/i.test(name)) o.erro = name; else if (/\.pedido\.md$/i.test(name)) o.pedido = name; else if (/\.resposta\.json$/i.test(name)) o.resposta = name; else if (TRANSCRIPT_RE.test(name)) o.transcricao = name; }
+    const aguardar = [], quem = [], erros = [];
+    let imported = 0, changed = false;
+    for (const [b, o] of bases) {
+      if (!o.transcricao) continue;
+      if (STATE.importados.includes(b)) { await moveToDone(inbox, [o.transcricao, o.pedido, o.resposta, o.erro].filter(Boolean)); continue; }
+      const job0 = STATE.fila.find(j => j.base === b);
+      if (o.resposta) {
+        const rf = await fileFromInbox(inbox, o.resposta);
+        if (Date.now() - rf.lastModified < 8000) { aguardar.push({ base: b, ficheiro: o.transcricao, date: job0?.date, aRecebir: true }); continue; } // o Kilo Code pode ainda estar a escrever
+        let p, raw = await rf.text();
+        try { p = normalizeAI(extractJSON(raw)); }
+        catch (err) {
+          await writeFile(inbox, `${b}.erro.txt`, `A resposta do Kilo Code para "${o.transcricao}" não é válida:\n${err.message}\n\nNo Kilo Code escreve outra vez /reuniao para a refazer.\n`);
+          await inbox.removeEntry(o.resposta); erros.push({ base: b, msg: err.message }); continue;
+        }
+        const f = await fileFromInbox(inbox, o.transcricao), r = await readTranscript(f);
+        const job = prepareJob({ ...r, alias: job0?.alias ?? (STATE.aliases || []).find(a => r.cues.some(c => samePerson(c.speaker, a))) ?? null, date: job0?.date || dateFromFile(o.transcricao, f.lastModified), modelo: job0?.modelo || STATE.modelo_padrao || 'auto', nome: o.transcricao });
+        const rec = recordFromJob(job, p);
+        rememberAlias(job.alias);
+        STATE.reunioes.push(rec);
+        closePending(p, job0?.codes || {}, rec.id);
+        STATE.fila = STATE.fila.filter(j => j.base !== b);
+        STATE.importados = [...STATE.importados.slice(-200), b];
+        await persist();
+        await moveToDone(inbox, [o.transcricao, o.pedido, o.resposta, o.erro].filter(Boolean));
+        imported++; changed = true; rebuild();
+        toast(`Nova reunião importada: ${p.titulo || o.transcricao}`);
+        continue;
+      }
+      if (o.pedido && job0) { aguardar.push({ base: b, ficheiro: o.transcricao, date: job0.date }); if (o.erro) erros.push({ base: b, msg: 'A última resposta não era válida; o pedido continua à espera.' }); continue; }
+      // Transcrição nova (ou pedido sem registo): preparar o pedido
+      const f = await fileFromInbox(inbox, o.transcricao);
+      let r; try { r = await readTranscript(f); } catch (err) { erros.push({ base: b, msg: `${o.transcricao}: ${err.message}` }); continue; }
+      if (!r.cues.length) { erros.push({ base: b, msg: `${o.transcricao}: não encontrei falas.` }); continue; }
+      const speakers = [...new Set(r.cues.map(c => c.speaker))];
+      const pend = STATE.fila.find(j => j.base === b && j.alias !== undefined);
+      let alias = pend ? pend.alias : (speakers.find(s => isMe(s)) ?? (speakers.length === 1 ? speakers[0] : undefined));
+      if (alias === undefined) { quem.push({ base: b, ficheiro: o.transcricao, speakers }); continue; }
+      const date = pend?.date || dateFromFile(o.transcricao, f.lastModified), modelo = pend?.modelo || STATE.modelo_padrao || 'auto';
+      const job = prepareJob({ ...r, alias, date, modelo, nome: o.transcricao });
+      const prompt = buildPrompt(job, `entrada/${b}.resposta.json`);
+      await writeFile(inbox, `${b}.pedido.md`, prompt);
+      if (o.erro) await inbox.removeEntry(o.erro).catch(() => {});
+      STATE.fila = STATE.fila.filter(j => j.base !== b).concat({ base: b, ficheiro: o.transcricao, alias, date, modelo, codes: Object.fromEntries(job.pendentes.map(x => [x.code, x.t.key])), criado: new Date().toISOString() });
+      changed = true; aguardar.push({ base: b, ficheiro: o.transcricao, date });
+    }
+    const liveBases = new Set([...bases.entries()].filter(([, o]) => o.transcricao).map(([b]) => b));
+    if (STATE.fila.some(j => !liveBases.has(j.base))) { STATE.fila = STATE.fila.filter(j => liveBases.has(j.base)); changed = true; }
+    INBOX = { aguardar, quem, erros };
+    if (changed) { await persist(); if (imported) { renderList(); renderNav(); } }
+    if (changed || JSON.stringify(INBOX) !== before) refreshInboxUI();
+  } catch (e) {
+    if (e.name === 'NotAllowedError' || e.name === 'SecurityError') { dirPerm = 'prompt'; renderSaveState(); }
+    else console.warn('scanInbox', e);
+  } finally { inboxBusy = false; }
+}
+async function setInboxWho(base, alias) {
+  const f = INBOX.quem.find(q => q.base === base); if (!f) return;
+  STATE.fila = STATE.fila.filter(j => j.base !== base).concat({ base, ficheiro: f.ficheiro, alias, date: null, modelo: STATE.modelo_padrao || 'auto', codes: {}, criado: new Date().toISOString() });
+  rememberAlias(alias); await persist(); scanInbox();
+}
+function refreshInboxUI() {
+  const v = current?.view ?? '';
+  if (v === '' || v === 'nova') { const y = main.scrollTop; route(); main.scrollTop = y; }
+  renderNav();
+}
+setInterval(() => { if (document.visibilityState === 'visible') scanInbox(); }, 4000);
+window.addEventListener('focus', () => scanInbox());
 
 /* ════════════════ Modelo das reuniões ════════════════ */
 const OWNER = () => (STATE.dono || '').trim();
@@ -365,6 +488,7 @@ const topTerms = (obj, n = 3) => LF.format(Object.entries(obj || {}).slice(0, n)
 
 /* ════════════════ Pedido para o Kilo Code ════════════════ */
 const MODELOS = {
+  auto: { nome: 'Automático', titulo: 'Automático', foco: 'O Kilo Code escolhe o tipo de resumo mais adequado à reunião.', seccoes: [] },
   ata: { nome: 'Ata', titulo: 'Ata de reunião', foco: 'Decisões, tarefas e prazos: quem faz o quê e quando.',
     seccoes: [['decisoes', 'Decisões Tomadas'], ['riscos', 'Pontos em Aberto']] },
   destaques: { nome: 'Destaques', titulo: 'Destaques', foco: 'As ideias principais, os conceitos duradouros e um resumo narrativo.',
@@ -385,18 +509,21 @@ const SEC_DESC = {
   citacoes: '"itens": [{"quem": "Nome", "texto": "citação exata"}]',
   pessoas: '"itens": [{"quem": "Nome", "texto": "intenção inferida", "citacao": "frase da transcrição que a sustenta"}]',
 };
-function buildPrompt(w) {
-  const M = MODELOS[w.modelo], d = w.data, me = d?.oradores.find(o => o.eu);
+function buildPrompt(w, respostaPara) {
+  const M = MODELOS[w.modelo] || MODELOS.auto, d = w.data, me = d?.oradores.find(o => o.eu);
   const n = d?.oradores.length || 0, fair = n ? 100 / Math.max(2, n) : 0;
   const metricas = d ? d.oradores.map(o => `- ${o.nome}${o.eu ? ' (DONO DO CADERNO)' : ''}: ${pctf(o.pct)} do tempo de fala, ${o.intervencoes} intervenções, ${w.aproximado ? '' : o.ppm + ' palavras/min, '}${o.perguntas} perguntas, maior intervenção ${fmtDur(o.maior_s)}${o.eu ? `, bordões ${nf(o.bordoes_100, 1)}/100 palavras (${topTerms(o.bordoes) || 'nenhum'}), hesitações ${nf(o.hesitacoes_100, 1)}/100 (${topTerms(o.hesitacoes, 2) || 'nenhuma'}), interrupções feitas ${o.interrompeu}` : ''}`).join('\n') : '(sem métricas)';
   const ctx = w.related.length ? w.related.map(x => `- ${fmtDate(x.date)}: "${x.title}". ${x.lead}${x.c.seccoes?.filter(s => s.tipo === 'decisoes').flatMap(s => s.itens).slice(0, 3).map(i => ` Decisão: ${i}`).join('') || ''}`).join('\n') : '(nenhuma)';
   const pend = w.pendentes.length ? w.pendentes.map(p => `- ${p.code}: ${p.t.text} (responsável: ${p.t.owner || '?'}${p.t.due ? ', prazo ' + p.t.due : ''}; da reunião "${p.t.m.title}")`).join('\n') : '(nenhuma)';
   const lines = w.turns.map(t => `[${clock(t.start - (d?.t0 || 0))}] ${t.speaker}: ${t.text}`).join('\n');
-  const secs = M.seccoes.map(([tipo, titulo]) => `    {"tipo": "${tipo}", "titulo": "${titulo}", ${SEC_DESC[tipo]}}`).join(',\n');
+  const secLine = ([tipo, titulo]) => `    {"tipo": "${tipo}", "titulo": "${titulo}", ${SEC_DESC[tipo]}}`;
+  const isAuto = !M.seccoes.length;
+  const escolha = isAuto ? `\nESCOLHA DO MODELO: escolhe UM destes modelos, o mais adequado ao conteúdo, e indica-o em "tipo". Usa as secções desse modelo, por esta ordem:\n${Object.values(MODELOS).filter(x => x.seccoes.length).map(x => `- "${x.nome}" (${x.foco}): ${x.seccoes.map(([t, ti]) => `${ti} [${t}]`).join(', ')}`).join('\n')}\nFormato de cada tipo de secção:\n${Object.entries(SEC_DESC).map(([t, d]) => `- ${t}: ${d}`).join('\n')}\n` : '';
+  const secs = isAuto ? '    {"tipo": "decisoes", "titulo": "Decisões Tomadas", "itens": ["..."]}' : M.seccoes.map(secLine).join(',\n');
   return `És um Secretário Executivo de Elite e coach de comunicação da equipa ${TEAM()} (Natixis).
 Analisa a transcrição de reunião no fim deste pedido e responde APENAS com um objeto JSON válido: sem texto antes ou depois, sem blocos de código, sem comentários. Escreve em português europeu.
 
-MODELO PEDIDO: ${M.titulo}. Foco: ${M.foco}
+${respostaPara ? `ONDE RESPONDER: escreve a resposta (só o objeto JSON) no ficheiro ${respostaPara}. Não alteres nenhum outro ficheiro.\n\n` : ''}MODELO PEDIDO: ${M.titulo}. Foco: ${M.foco}${escolha}
 DATA DA REUNIÃO: ${w.date} (usa-a para converter prazos relativos como "sexta-feira" em datas AAAA-MM-DD).
 DONO DO CADERNO: ${OWNER() || 'não indicado'}${me ? ` (na transcrição aparece como "${me.nome}")` : ''}. O Radar de Comunicação é sobre esta pessoa. Nas tarefas desta pessoa usa "responsavel": "Eu".
 
@@ -417,12 +544,12 @@ REGRAS
 - "contexto": 1 a 3 frases que ligam esta reunião às anteriores (decisões que vêm de trás, o que mudou). Vazio se não houver ligação.
 - "temas": os assuntos discutidos, por ordem, com "inicio" e "fim" no formato mm:ss tirados dos tempos [mm:ss] da transcrição, e um resumo de 1 a 2 frases cada.
 - "tarefas": todas as ações combinadas. "acao" começa por um verbo. "responsavel" é o nome da pessoa ("Eu" para o dono do caderno). "prazo" em AAAA-MM-DD ou null. "minuto" é o mm:ss em que foi combinada.
-- "seccoes": exatamente as secções indicadas abaixo, por esta ordem. Se uma não tiver conteúdo, deixa "itens" vazio.
+- "seccoes": ${isAuto ? 'as secções do modelo que escolheres' : 'exatamente as secções indicadas abaixo'}, por esta ordem. Se uma não tiver conteúdo, deixa "itens" vazio.
 - Radar: honesto e específico, baseado no que a pessoa disse e nas métricas. Em "a_melhorar" diz o que aconteceu, cita a frase e dá a frase alternativa que podia ter dito. "experimenta": uma única ação prática para a próxima reunião.
 
 FORMATO DA RESPOSTA (JSON):
 {
-  "titulo": "título curto e específico da reunião",
+${isAuto ? '  "tipo": "Ata | Destaques | Dados | Intenção | Conceitos",\n' : ''}  "titulo": "título curto e específico da reunião",
   "etiquetas": ["3 a 8 palavras-chave: projetos, clientes, temas"],
   "resumo": "...",
   "contexto": "...",
@@ -464,8 +591,10 @@ function normalizeAI(o, modelo) {
     const empty = (out.itens && !out.itens.length) || (tipo === 'texto' && !out.texto) || (tipo === 'tabela' && !out.linhas.length);
     return empty ? null : out;
   };
+  const TIPOS_OK = ['Ata', 'Destaques', 'Dados', 'Intenção', 'Conceitos'];
+  const tipoIn = str(o.tipo), tipo = TIPOS_OK.find(t => norm(t) === norm(tipoIn)) || null;
   const c = {
-    titulo: str(o.titulo), etiquetas: arr(o.etiquetas).map(str).filter(Boolean).slice(0, 10),
+    tipo, titulo: str(o.titulo), etiquetas: arr(o.etiquetas).map(str).filter(Boolean).slice(0, 10),
     resumo: str(o.resumo), contexto: str(o.contexto),
     temas: arr(o.temas).map(t => ({ titulo: str(t?.titulo), inicio: str(t?.inicio), fim: str(t?.fim), resumo: str(t?.resumo) })).filter(t => t.titulo),
     seccoes: arr(o.seccoes).map(sec).filter(Boolean),
@@ -520,6 +649,8 @@ function renderList() {
   $('#chips').innerHTML = types.length > 1 ? types.map(t => `<button type="button" class="chip" aria-pressed="${t === typeFilter}" data-type="${esc(t)}">${esc(t)}</button>`).join('') : '';
   markNav();
 }
+
+function renderAll() { renderBrand(); renderNav(); renderList(); renderSaveState(); route(); }
 
 /* ════════════════ Componentes ════════════════ */
 function ribbon(m) {
@@ -608,6 +739,23 @@ const taskRow = t => {
 };
 
 /* ════════════════ Vistas ════════════════ */
+function folderPanel(full) {
+  if (!FS_OK) return full ? `<div class="status-line info">${icon('info')}<p>Este navegador não permite o modo pasta. Abre o caderno no Microsoft Edge ou no Google Chrome, ou usa o copiar e colar mais abaixo.</p></div>` : '';
+  if (!dirHandle) return `<section class="panel" aria-labelledby="pasta-h"><div class="panel-head"><h2 id="pasta-h">Liga a pasta do caderno</h2></div>
+    <p style="margin:0 0 var(--s-4);color:var(--ink-2);max-width:var(--measure)">Escolhe a pasta onde está este caderno (a do ZIP). A partir daí guardas as transcrições do Teams em <code>entrada</code>, escreves <b>/reuniao</b> no Kilo Code e as reuniões aparecem aqui sozinhas.</p>
+    <button class="btn primary btn-lg" type="button" data-action="connect-folder">Escolher a pasta do caderno</button></section>`;
+  if (dirPerm !== 'granted') return `<div class="callout">${icon('alert')}<p>O Edge precisa da tua autorização para voltar a usar a pasta <b>${esc(dirHandle.name)}</b>. <button class="btn" type="button" data-action="relink">Voltar a ligar a pasta</button></p></div>`;
+  const { aguardar, quem, erros } = INBOX;
+  if (!aguardar.length && !quem.length && !erros.length) return full ? `<section class="panel" aria-labelledby="pasta-h"><div class="panel-head"><h2 id="pasta-h">Caixa de entrada vazia</h2><p>Pasta ${esc(dirHandle.name)}</p></div>
+    <ol class="steps-list"><li>No Teams, transfere a transcrição (.vtt ou .docx) para a pasta <code>${esc(dirHandle.name)}\\${INBOX_DIR}</code>.</li><li>Este caderno prepara o pedido sozinho, em poucos segundos.</li><li>No Kilo Code, escreve <b>/reuniao</b> e envia.</li><li>A reunião aparece aqui quando o Kilo Code terminar.</li></ol></section>` : '';
+  return `<section class="panel" aria-labelledby="pasta-h" aria-live="polite"><div class="panel-head"><h2 id="pasta-h">Caixa de entrada</h2><p>Pasta ${esc(dirHandle.name)}\\${INBOX_DIR}</p></div>
+    ${quem.map(q => `<div class="step-head" style="margin:0 0 var(--s-4)"><span class="step-num">${icon('users')}</span><div style="min-width:0"><h2 style="font-size:var(--t-base)">Quem és tu em “${esc(q.ficheiro)}”?</h2>
+      <div class="people-pick" style="margin-top:var(--s-2)">${q.speakers.map(sp => `<button type="button" class="chip" data-inbox-who="${esc(q.base)}" data-alias="${esc(sp)}" translate="no">${esc(displayName(sp))}</button>`).join('')}<button type="button" class="chip" data-inbox-who="${esc(q.base)}" data-alias="">Não participei</button></div></div></div>`).join('')}
+    ${aguardar.length ? `<div class="status-line info" style="margin-top:0">${icon('clock')}<p><b>${plural(aguardar.length, 'transcrição pronta', 'transcrições prontas')} para o Kilo Code</b> (${esc(LF.format(aguardar.map(a => a.ficheiro)))}). No Kilo Code, escreve <b>/reuniao</b> e envia. Este caderno importa o resultado sozinho.</p></div>` : ''}
+    ${erros.map(e => `<div class="status-line bad">${icon('alert')}<p>${esc(e.msg)}</p></div>`).join('')}
+  </section>`;
+}
+
 function welcomePanel() {
   return `<section class="panel welcome" aria-labelledby="wel-h">
     <h2 id="wel-h">Bem-vindo ao teu caderno de reuniões</h2>
@@ -632,8 +780,8 @@ function viewHome() {
       <div class="actions"><a class="btn primary btn-lg" href="#/nova">${icon('plus')}Nova reunião</a></div></div>
     <div class="stack">
       ${!OWNER() ? welcomePanel() : ''}
-      ${usingExamples() ? `<div class="callout">${icon('info')}<p>Estas são <b>reuniões de exemplo</b>, para veres como fica. Desaparecem quando guardares a primeira reunião tua em <a class="btn-link" href="#/nova">Nova reunião</a>.</p></div>` : ''}
-      ${fileHandle && filePerm !== 'granted' ? `<div class="callout">${icon('alert')}<p>O caderno está ligado a um ficheiro de dados, mas o navegador pede autorização outra vez. <button class="btn" type="button" data-action="relink">Voltar a ligar</button></p></div>` : ''}
+      ${usingExamples() ? `<div class="callout">${icon('info')}<p>Estas são <b>reuniões de exemplo</b>, para veres como fica. Desaparecem quando a primeira reunião tua entrar no caderno.</p></div>` : ''}
+      ${OWNER() ? folderPanel(false) : ''}
       ${last ? `<div class="stats">
         <div class="stat"><div class="stat-v">${nf(inMonth.length)}</div><div class="stat-l">${inMonth.length === 1 ? 'Reunião' : 'Reuniões'} este mês</div><div class="stat-h">${nf(meetings.length)} no total</div></div>
         <div class="stat"><div class="stat-v">${fmtDur(inMonth.reduce((s, m) => s + (m.dur || 0), 0))}</div><div class="stat-l">Em reuniões este mês</div><div class="stat-h">${fmtDur(meetings.reduce((s, m) => s + (m.dur || 0), 0))} no total</div></div>
@@ -846,7 +994,7 @@ function viewEvolution() {
 
 /* ── Nova reunião: assistente em 4 passos ── */
 let W = null; // estado do assistente
-function resetWizard() { W = { ficheiro: null, turns: [], cues: [], aproximado: false, fonte: '', alias: null, date: TODAY, modelo: prefs.get('modelo', 'ata'), data: null, prompt: '', copied: false, resposta: '', parsed: null, erro: '', related: [], pendentes: [] }; }
+function resetWizard() { W = { ficheiro: null, turns: [], cues: [], aproximado: false, fonte: '', alias: null, date: TODAY, modelo: prefs.get('modelo', STATE.modelo_padrao || 'auto'), data: null, prompt: '', copied: false, resposta: '', parsed: null, erro: '', related: [], pendentes: [] }; }
 function wizardAnalyse() {
   W.turns = mergeTurns(W.cues);
   W.data = analyse(W.turns, W.alias);
@@ -862,7 +1010,10 @@ function viewNew() {
   const speakers = W.data ? W.data.oradores : [];
   const step = (n, title, sub, body, enabled, done) => `<section class="step ${done ? 'done' : ''}" aria-disabled="${!enabled}" aria-labelledby="st-${n}"><div class="step-head"><span class="step-num">${done ? icon('check') : n}</span><div><h2 id="st-${n}">${title}</h2><p>${sub}</p></div></div>${body}</section>`;
   return `<div class="page">
-    <div class="page-head"><div><h1 tabindex="-1">Nova reunião</h1><p class="page-sub">Quatro passos, cerca de dois minutos. Nada sai deste computador além do que colares no Kilo Code.</p></div></div>
+    <div class="page-head"><div><h1 tabindex="-1">Nova reunião</h1><p class="page-sub">Com a pasta ligada, basta guardar a transcrição em <code>entrada</code> e escrever <b>/reuniao</b> no Kilo Code.</p></div></div>
+    <div class="stack" style="margin-bottom:var(--s-10)">${folderPanel(true)}</div>
+    <h2 style="font-size:var(--t-lg);margin:0 0 var(--s-2)">Sem a pasta: copiar e colar</h2>
+    <p class="page-sub" style="margin:0 0 var(--s-5)">Plano B, se o modo pasta não estiver disponível. Quatro passos, cerca de dois minutos.</p>
     ${step(1, 'Escolhe a transcrição', 'O ficheiro que descarregaste do Teams (.vtt ou .docx). Também serve texto copiado.', `
       <div class="drop" id="drop" role="button" tabindex="0" aria-describedby="drop-help">${icon('upload')}<b>${W.ficheiro ? esc(W.ficheiro) : 'Arrasta o ficheiro para aqui ou clica para escolher'}</b><span id="drop-help" class="field-help">${has ? `${plural(W.turns.length, 'intervenção', 'intervenções')}, ${plural(speakers.length, 'pessoa', 'pessoas')}${W.data ? ', ' + fmtDur(W.data.duracao_s) : ''}${W.aproximado ? ' (tempos aproximados)' : ''}` : '.vtt, .docx ou .txt'}</span></div>
       <details style="margin-top:var(--s-3)"><summary class="btn-link" style="cursor:pointer">Prefiro colar o texto da transcrição</summary>
@@ -911,25 +1062,18 @@ function acceptCues(r, name) {
 function rerenderWizard() { const y = main.scrollTop; view.innerHTML = viewNew(); main.scrollTop = y; }
 async function saveMeeting() {
   if (!W.parsed) return;
-  const p = W.parsed, names = W.data ? W.data.oradores.map(o => o.nome) : [...new Set(W.turns.map(t => t.speaker))];
-  const order = Object.fromEntries(names.map((n, i) => [n, i]));
-  const id = `${W.date}-${slug(p.titulo || 'reuniao')}-${uid().slice(-4)}`;
-  const rec = {
-    id, criado_em: new Date().toISOString(), data: W.date, tipo: MODELOS[W.modelo].nome, fonte: W.fonte, aproximado: W.aproximado, eu: W.alias || null,
-    oradores: names, falas: W.turns.map(t => [+t.start.toFixed(2), +t.end.toFixed(2), order[t.speaker], t.text, +t.spoken.toFixed(2)]),
-    conteudo: p, notas: '',
-  };
-  if (W.alias && !(STATE.aliases || []).some(a => samePerson(a, W.alias))) STATE.aliases = [...(STATE.aliases || []), W.alias];
+  const rec = recordFromJob(W, W.parsed);
+  rememberAlias(W.alias);
   STATE.reunioes.push(rec);
-  for (const code of p.tarefas_concluidas) { const pe = W.pendentes.find(x => x.code === code); if (pe) { pe.t.t.feito = true; pe.t.t.fechada_em = id; } }
+  closePending(W.parsed, Object.fromEntries(W.pendentes.map(x => [x.code, x.t.key])), rec.id);
   await persist('Reunião guardada.');
-  resetWizard(); rebuild(); renderList(); renderNav(); go('#/r/' + encodeURIComponent(id));
+  resetWizard(); rebuild(); renderList(); renderNav(); go('#/r/' + encodeURIComponent(rec.id));
 }
 
 function viewSettings() {
-  const fileStatus = !FS_OK ? 'Este navegador não permite ligar um ficheiro. Usa o Microsoft Edge ou o Google Chrome, ou faz cópias de segurança regulares.'
-    : fileHandle ? (filePerm === 'granted' ? `Ligado ao ficheiro <b>${esc(fileHandle.name)}</b>. Cada alteração é gravada nele.` : `Ligado a <b>${esc(fileHandle.name)}</b>, mas o navegador pede autorização.`)
-    : 'Não ligado. Os dados ficam só na memória deste navegador.';
+  const folderStatus = !FS_OK ? 'Este navegador não permite o modo pasta. Usa o Microsoft Edge ou o Google Chrome.'
+    : dirHandle ? (dirPerm === 'granted' ? `Ligado à pasta <b>${esc(dirHandle.name)}</b>. As reuniões são gravadas em <code>${DATA_FILE}</code> e as transcrições entram por <code>${INBOX_DIR}</code>.` : `Ligado à pasta <b>${esc(dirHandle.name)}</b>, mas o Edge pede autorização.`)
+    : 'Não ligado. As reuniões ficam só neste navegador.';
   return `<div class="page">
     <div class="page-head"><div><h1 tabindex="-1">Definições</h1><p class="page-sub">O teu nome, onde ficam guardados os dados e cópias de segurança.</p></div></div>
     <div class="stack">
@@ -942,14 +1086,16 @@ function viewSettings() {
           <div><label class="field-label" for="s-alias">Como apareces nas transcrições do Teams</label><input class="text-input" id="s-alias" name="aliases" value="${esc((STATE.aliases || []).join('; '))}" placeholder="Ex.: Silva, Ana…" spellcheck="false"><p class="field-help">Separa vários nomes com ponto e vírgula. É preenchido sozinho quando escolhes quem és numa reunião.</p></div>
           <div class="actions"><button class="btn primary" type="submit">Guardar</button></div>
         </form></section>
-      <section class="panel" aria-labelledby="set-file"><div class="panel-head"><h2 id="set-file">Ficheiro de dados (recomendado)</h2></div>
-        <p style="margin:0 0 var(--s-4);color:var(--ink-2);max-width:var(--measure)">Guarda as reuniões num ficheiro teu, por exemplo no OneDrive ou numa pasta de rede. Assim não se perdem se o navegador for limpo, e podes abrir o caderno noutro PC.</p>
-        <div class="status-line info">${icon('info')}<p>${fileStatus}</p></div>
+      <section class="panel" aria-labelledby="set-file"><div class="panel-head"><h2 id="set-file">Pasta do caderno</h2></div>
+        <p style="margin:0 0 var(--s-4);color:var(--ink-2);max-width:var(--measure)">A pasta onde está este caderno, de preferência no OneDrive. Guarda as reuniões num ficheiro teu e é por onde o Kilo Code entrega os resumos.</p>
+        <div class="status-line info">${icon('info')}<p>${folderStatus}</p></div>
         ${FS_OK ? `<div class="actions" style="margin-top:var(--s-4)">
-          ${fileHandle && filePerm !== 'granted' ? `<button class="btn primary" type="button" data-action="relink">Voltar a ligar</button>` : ''}
-          <button class="btn ${fileHandle ? '' : 'primary'}" type="button" data-action="link-new">Criar ficheiro de dados</button>
-          <button class="btn" type="button" data-action="open-file">Abrir um ficheiro de dados existente</button>
-          ${fileHandle ? `<button class="btn" type="button" data-action="unlink">Desligar</button>` : ''}</div>` : ''}
+          ${dirHandle && dirPerm !== 'granted' ? `<button class="btn primary" type="button" data-action="relink">Voltar a ligar a pasta</button>` : ''}
+          <button class="btn ${dirHandle ? '' : 'primary'}" type="button" data-action="connect-folder">${dirHandle ? 'Escolher outra pasta' : 'Escolher a pasta do caderno'}</button>
+          ${dirHandle ? `<button class="btn" type="button" data-action="unlink">Desligar</button>` : ''}</div>` : ''}
+        <div style="margin-top:var(--s-5);max-width:360px"><label class="field-label" for="s-modelo">Tipo de resumo por omissão</label>
+          <select class="text-input" id="s-modelo" name="modelo">${Object.entries(MODELOS).map(([k, M]) => `<option value="${k}" ${k === (STATE.modelo_padrao || 'auto') ? 'selected' : ''}>${M.titulo}</option>`).join('')}</select>
+          <p class="field-help">Usado no modo pasta. “Automático” deixa o Kilo Code escolher.</p></div>
       </section>
       <section class="panel" aria-labelledby="set-copy"><div class="panel-head"><h2 id="set-copy">Cópias de segurança</h2></div>
         <div class="actions"><button class="btn" type="button" data-action="export">Descarregar cópia</button><button class="btn" type="button" data-action="import">Importar cópia</button></div>
@@ -964,33 +1110,33 @@ function viewHelp() {
   return `<article class="page help">
     <h1 tabindex="-1">Como usar</h1>
     <p class="page-sub">Guia rápido para a equipa ${esc(TEAM())}.</p>
-    <h2>1. Descarregar a transcrição do Teams</h2>
-    <ol><li>No Teams, abre a reunião no calendário (ou o chat da reunião) e escolhe <b>Gravações e transcrições</b>.</li>
-      <li>Na transcrição, escolhe <b>Transferir</b> e o formato <b>.vtt</b> (o .docx também serve).</li>
-      <li>Guarda o ficheiro numa pasta tua. Ajuda pôr a data no nome, por exemplo <code>2026-11-05 comité IT.vtt</code>.</li></ol>
-    <h2>2. Adicionar a reunião ao caderno</h2>
-    <ol><li>Clica em <b>Nova reunião</b>.</li>
-      <li>Arrasta o ficheiro para a caixa (ou clica para o escolher). Confirma a data e escolhe <b>quem és tu</b> na lista de pessoas.</li>
-      <li>Escolhe o tipo de resumo: <b>Ata</b> para decisões e tarefas, <b>Dados</b> para números, <b>Intenção</b> para negociações, <b>Destaques</b> ou <b>Conceitos</b> para ideias.</li>
-      <li>Clica em <b>Copiar pedido</b>.</li></ol>
-    <h2>3. Pedir o resumo ao Kilo Code</h2>
-    <ol><li>Abre o Kilo Code no VS Code e começa uma conversa nova.</li>
-      <li>Cola o pedido (<kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">V</kbd>) e envia.</li>
-      <li>Espera até a resposta terminar. Começa por <code>{</code> e acaba em <code>}</code>.</li>
-      <li>Copia a resposta inteira. Se o Kilo Code a mostrar num bloco de código, usa o botão de copiar desse bloco.</li></ol>
-    <h2>4. Guardar</h2>
-    <ol><li>Volta ao caderno e cola a resposta no passo 4.</li>
-      <li>Se aparecer <b>Resposta válida</b>, clica em <b>Guardar reunião</b>. Pronto.</li>
-      <li>Se aparecer um erro, segue a indicação. O mais comum é a resposta ter sido cortada: pede ao Kilo Code “Repete só o JSON, completo.” e cola outra vez.</li></ol>
+    <h2>Como funciona</h2>
+    <p>O caderno e o Kilo Code não falam diretamente: trocam ficheiros na pasta <code>entrada</code>. O caderno prepara um pedido por transcrição, o Kilo Code escreve a resposta e o caderno importa-a sozinho.</p>
+    <h2>Preparar (uma vez)</h2>
+    <ol><li>Copia a pasta <b>Caderno de Reuniões</b> do ZIP para o teu OneDrive.</li>
+      <li>Abre <b>Caderno de Reuniões.html</b> com o Microsoft Edge e escreve o teu nome.</li>
+      <li>Clica em <b>Escolher a pasta do caderno</b> e escolhe essa pasta. Confirma <b>Permitir</b>.</li>
+      <li>No VS Code: <b>File</b>, <b>Open Folder…</b>, a mesma pasta. No Kilo Code, escreve <code>/</code> e confirma que aparece <b>reuniao</b>.</li></ol>
+    <h2>Em cada reunião</h2>
+    <ol><li>No Teams: reunião, <b>Gravações e transcrições</b>, <b>Transferir</b> (.vtt ou .docx). Guarda em <code>Caderno de Reuniões\entrada</code>.</li>
+      <li>Com o caderno aberto, espera uns segundos. Na primeira vez escolhe quem és.</li>
+      <li>No Kilo Code, escreve <b>/reuniao</b> e envia.</li>
+      <li>A reunião aparece no caderno quando o Kilo Code terminar.</li></ol>
+    <h2>Plano B: copiar e colar</h2>
+    <p>Se o modo pasta não estiver disponível, em <a class="btn-link" href="#/nova">Nova reunião</a> usa os quatro passos de copiar e colar.</p>
     <h2>No dia a dia</h2>
     <ul><li><b>Tarefas</b> junta as ações de todas as reuniões. Marca-as quando estiverem feitas.</li>
       <li>Na reunião, <b>Copiar ata</b> copia a ata pronta para colar num email ou no Teams.</li>
       <li>Os botões com minutos (ex.: <code>12:30</code>) abrem a transcrição nesse momento.</li>
       <li>Pesquisa com a caixa da barra lateral ou com <kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">K</kbd>.</li></ul>
+    <h2>Se algo não correr bem</h2>
+    <ul><li><b>O Kilo Code não mostra /reuniao:</b> abre a pasta do caderno no VS Code e escreve <code>/reload</code>.</li>
+      <li><b>Resposta não válida:</b> escreve outra vez <b>/reuniao</b> no Kilo Code.</li>
+      <li><b>Voltar a ligar a pasta:</b> clica no botão e escolhe <b>Permitir</b>.</li></ul>
     <h2>Onde ficam os dados</h2>
-    <ul><li>Tudo fica neste computador. O caderno não usa a internet.</li>
-      <li>Recomendado: em <a class="btn-link" href="#/definicoes">Definições</a>, cria um <b>ficheiro de dados</b> no OneDrive. Assim não perdes nada se o navegador for limpo.</li>
-      <li>O único sítio para onde o conteúdo vai é o Kilo Code, quando colas o pedido.</li></ul>
+    <ul><li>Na tua pasta: <code>caderno-dados.json</code>. O caderno não usa a internet.</li>
+      <li>O conteúdo só é lido pelo Kilo Code, a ferramenta de IA interna.</li>
+      <li>Cópias de segurança em <a class="btn-link" href="#/definicoes">Definições</a>.</li></ul>
   </article>`;
 }
 
@@ -1045,7 +1191,7 @@ search.addEventListener('keydown', e => {
 $('#chips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; typeFilter = typeFilter === b.dataset.type ? null : b.dataset.type; renderList(); writeUrlState(); });
 
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-search],[data-action],[data-f],.ribbon-key,[data-seek],[data-alias]'); if (!t) return;
+  const t = e.target.closest('[data-search],[data-action],[data-f],.ribbon-key,[data-seek],[data-alias],[data-inbox-who]'); if (!t) return;
   if (t.classList.contains('ribbon-key')) {
     const rb = t.closest('[data-ribbon]'), on = t.getAttribute('aria-pressed') !== 'true';
     $$('.ribbon-key', rb).forEach(k => k.setAttribute('aria-pressed', 'false'));
@@ -1053,6 +1199,7 @@ document.addEventListener('click', async e => {
     return;
   }
   if (t.dataset.seek != null) { seek(+t.dataset.seek); return; }
+  if (t.dataset.inboxWho != null) { setInboxWho(t.dataset.inboxWho, t.dataset.alias || null); return; }
   if (t.dataset.alias != null) { W.alias = t.dataset.alias; wizardAnalyse(); rerenderWizard(); return; }
   if (t.dataset.search != null) { search.value = t.dataset.search; query = t.dataset.search; renderList(); writeUrlState(); const f = filtered()[0]; if (f) go(meetingHref(f)); return; }
   if (t.dataset.f) { const [k, v] = t.dataset.f.split(':'); const f = prefs.get('filtro-tarefas', { who: 'mine', state: 'open' }); f[k] = v; prefs.set('filtro-tarefas', f); const y = main.scrollTop; view.innerHTML = viewTasks(); main.scrollTop = y; return; }
@@ -1068,10 +1215,9 @@ document.addEventListener('click', async e => {
   else if (a === 'use-paste') { const txt = $('#paste-transcript').value; const r = TS.test(txt) ? { cues: parseVTT(txt), aproximado: false, fonte: 'vtt' } : { ...parsePlain(txt), fonte: 'texto' }; if (!r.cues.length) toast('Não reconheci falas neste texto. Cada fala deve começar pelo nome, ex.: “Ana Silva: …”.'); else acceptCues(r, 'Texto colado'); }
   else if (a === 'save-meeting') saveMeeting();
   else if (a === 'reset-wizard') { resetWizard(); rerenderWizard(); }
-  else if (a === 'link-new') linkNewFile();
-  else if (a === 'open-file') openExistingFile();
-  else if (a === 'relink') relinkFile();
-  else if (a === 'unlink') unlinkFile();
+  else if (a === 'connect-folder') connectFolder();
+  else if (a === 'relink') relinkFolder();
+  else if (a === 'unlink') unlinkFolder();
   else if (a === 'export') exportData();
   else if (a === 'import') $('#import-in').click();
   else if (a === 'wipe') { if (!confirm('Apagar todas as reuniões deste navegador? Descarrega antes uma cópia se quiseres guardá-las.')) return; STATE.reunioes = []; await persist('Reuniões apagadas.'); rebuild(); renderList(); renderNav(); go('#/'); }
@@ -1086,6 +1232,7 @@ document.addEventListener('submit', async e => {
   }
 });
 view.addEventListener('change', async e => {
+  if (e.target.id === 's-modelo') { STATE.modelo_padrao = e.target.value; await persist('Tipo de resumo por omissão guardado.'); return; }
   if (e.target.matches('input[name="modelo"]')) { W.modelo = e.target.value; W.copied = false; wizardAnalyse(); rerenderWizard(); return; }
   if (e.target.id === 'w-date') { if (isISO(e.target.value)) { W.date = e.target.value; W.copied = false; wizardAnalyse(); rerenderWizard(); } return; }
   const cb = e.target.closest('input[type=checkbox][data-key]'); if (!cb) return;
@@ -1195,5 +1342,6 @@ window.addEventListener('beforeunload', e => { if (current?.view === 'nova' && W
 (async () => {
   await loadState();
   readUrlState(); applyTheme(); renderBrand(); rebuild(); renderNav(); renderList(); renderSaveState(); route();
+  scanInbox();
 })();
 })();

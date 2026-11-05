@@ -13,12 +13,15 @@ O que o ficheiro faz
 - Lê localmente transcrições do Microsoft Teams (.vtt, .docx, .txt) escolhidas
   pelo utilizador, e calcula métricas de participação (tempo de fala, etc.)
   em JavaScript, no próprio navegador.
-- Gera um texto (pedido) que o utilizador copia manualmente para o assistente
-  de IA interno aprovado (Kilo Code). A resposta (JSON) é colada manualmente
-  de volta. O ficheiro nunca comunica com a IA nem com qualquer serviço.
-- Guarda os dados no armazenamento local do navegador (IndexedDB) e,
-  opcionalmente, num ficheiro .json escolhido pelo utilizador
-  (File System Access API, com autorização explícita do utilizador).
+- Troca ficheiros com o assistente de IA interno aprovado (Kilo Code, no VS Code)
+  através de uma pasta local escolhida pelo utilizador (File System Access API,
+  com autorização explícita): o caderno escreve entrada/NOME.pedido.md, o Kilo
+  Code responde com entrada/NOME.resposta.json (comando /reuniao, definido em
+  .kilo/commands/reuniao.md), e o caderno importa e move os ficheiros para
+  entrada/processadas. Não há comunicação direta entre o caderno e a IA.
+- Alternativa sem pasta: o utilizador copia o pedido e cola a resposta à mão.
+- Guarda os dados no armazenamento local do navegador (IndexedDB) e no ficheiro
+  caderno-dados.json da pasta escolhida (ex.: OneDrive empresarial).
 
 Rede
 ----
@@ -41,8 +44,9 @@ Requisitos
 ----------
 - Microsoft Edge ou Google Chrome atualizados (versões de 2023 em diante).
 - Políticas de grupo que possam afetar: bloqueio de JavaScript em file://,
-  DefaultFileSystemWriteGuardSetting (apenas desativa a gravação em ficheiro;
-  o caderno continua a funcionar com cópias de segurança manuais).
+  DefaultFileSystemWriteGuardSetting / DefaultFileSystemReadGuardSetting
+  (desativam o modo pasta; o caderno continua a funcionar em copiar e colar).
+- Kilo Code com permissão para ler e escrever ficheiros na pasta do caderno.
 
 Código
 ------

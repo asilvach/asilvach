@@ -50,6 +50,13 @@ def construir_zip(html: Path) -> Path:
         for vtt in sorted((SRC / "exemplos").glob("*.vtt")):
             f.write(vtt, f"{PASTA}/Exemplo para experimentar/{vtt.name}")
         f.write(DOCS / "NOTA-TECNICA.txt", f"{PASTA}/Para a equipa de IT/Nota técnica.txt")
+        # Modo pasta: comando /reuniao para o Kilo Code (formato atual e formato antigo) e caixa de entrada
+        k = DOCS / "kilo"
+        f.write(k / "reuniao.md", f"{PASTA}/.kilo/commands/reuniao.md")
+        f.write(k / "reuniao.md", f"{PASTA}/.kilocode/workflows/reuniao.md")
+        f.write(k / "AGENTS.md", f"{PASTA}/AGENTS.md")
+        f.write(k / "COMO-USAR-ESTA-PASTA.md", f"{PASTA}/entrada/COMO-USAR-ESTA-PASTA.md")
+        f.writestr(f"{PASTA}/entrada/processadas/", "")
     return z
 
 

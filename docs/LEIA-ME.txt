@@ -4,29 +4,30 @@ CADERNO DE REUNIÕES · CIO OFFICE PORTUGAL
 O que é
 -------
 Um caderno pessoal para as tuas reuniões do Teams: atas, decisões, tarefas,
-quem falou quanto e dicas sobre a tua comunicação. Funciona só neste PC,
-sem internet e sem instalar nada.
+quem falou quanto e dicas sobre a tua comunicação. Funciona no teu PC, sem
+internet e sem instalar nada. O Kilo Code faz os resumos.
 
-Como começar (5 minutos, uma vez)
----------------------------------
-1. Copia a pasta "Caderno de Reuniões" para um sítio teu,
-   de preferência no OneDrive (ex.: OneDrive > Documentos).
-2. Abre "Caderno de Reuniões.html" com o Microsoft Edge (duplo clique).
-   Dica: clica no ficheiro com o botão direito > Abrir com > Microsoft Edge.
-3. Escreve o teu nome e clica em Guardar.
-4. Vai a Definições > Criar ficheiro de dados e guarda-o na mesma pasta.
-   Assim as tuas reuniões ficam num ficheiro teu e não se perdem.
-5. Experimenta com o ficheiro de exemplo:
-   Nova reunião > escolhe "2026-11-04 Negociação fornecedor (exemplo).vtt".
+Preparar (uma vez, 5 minutos)
+-----------------------------
+1. Copia esta pasta "Caderno de Reuniões" para o teu OneDrive (ex.: Documentos).
+2. Abre "Caderno de Reuniões.html" com o Microsoft Edge
+   (botão direito > Abrir com > Microsoft Edge). Escreve o teu nome.
+3. No caderno, clica em "Escolher a pasta do caderno" e escolhe esta pasta.
+4. No VS Code: File > Open Folder... > esta pasta.
+   No Kilo Code, escreve / e confirma que aparece "reuniao".
 
-Todos os dias
--------------
-1. Teams > reunião > Transcrição > Transferir (.vtt ou .docx).
-2. Caderno > Nova reunião > escolhe o ficheiro > escolhe quem és.
-3. Copiar pedido > cola no Kilo Code > espera pela resposta.
-4. Copia a resposta do Kilo Code > cola no caderno > Guardar reunião.
+Em cada reunião
+---------------
+1. Teams > reunião > Gravações e transcrições > Transferir (.vtt ou .docx).
+   Guarda o ficheiro na pasta "entrada".
+2. Com o caderno aberto no Edge, espera uns segundos.
+3. No Kilo Code escreve /reuniao e envia.
+4. A reunião aparece no caderno sozinha.
 
-O guia completo, com imagens, está em "Procedimento - Caderno de Reuniões.pdf"
-e também dentro do caderno, em "Como usar".
+Para experimentar: copia o ficheiro da pasta "Exemplo para experimentar"
+para a pasta "entrada".
 
-Dúvidas: fala com quem te enviou esta pasta.
+Guia completo com imagens: "Procedimento - Caderno de Reuniões.pdf".
+Também está no próprio caderno, em "Como usar".
+
+Não apagues nem alteres: "caderno-dados.json", ".kilo", ".kilocode", "AGENTS.md".
