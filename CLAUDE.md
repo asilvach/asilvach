@@ -3,11 +3,15 @@
 Ferramenta da equipa: transcrições do Teams → um caderno HTML pessoal, offline e pesquisável.
 Cada pessoa tem o seu caderno; o repositório guarda só o modelo e as ferramentas.
 
-## Comandos
+## Comandos (Kilo Code e Claude Code)
 - `/configurar` — cria ou atualiza o caderno pessoal (nome, nome no Teams). Correr depois de cada `git pull`.
 - `/reuniao <ficheiro.vtt> [ata|destaques|dados|intencao|conceitos]` — processa uma reunião.
 
 ## Estrutura
+- `prompts/prompt_mestre.md` e `prompts/configurar.md` — a fonte única das instruções. Os comandos
+  em `.kilo/commands/` (Kilo Code) e `.claude/commands/` (Claude Code) só apontam para eles.
+- `.kilo/agents/secretario.md` — agente do Kilo Code com permissões limitadas (escreve só em `transcricoes/`).
+- `kilo.jsonc` — configuração do Kilo Code (carrega este ficheiro como regras).
 - `modelo/caderno.html` — o modelo da equipa (design, lógica, 3 reuniões de exemplo). Versionado.
 - `caderno_reunioes.html` e `config.json` — **pessoais**, fora do git.
 - `transcricoes/` — `.vtt`, textos limpos, análises e artigos. Fora do git.
