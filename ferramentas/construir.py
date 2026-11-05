@@ -19,12 +19,34 @@ NOME = "Caderno de Reuniões.html"
 PASTA = "Caderno de Reuniões"
 
 
+def fontes_css() -> str:
+    """Embute as fontes (marca/fontes, licença OFL) como data: URIs, para o caderno funcionar sem rede."""
+    import base64
+    d = ROOT / "marca" / "fontes"
+    faces = [("IBM Plex Sans", "ibm-plex-sans-latin-400-normal.woff2", "400", "normal"),
+             ("IBM Plex Sans", "ibm-plex-sans-latin-600-normal.woff2", "600", "normal"),
+             ("IBM Plex Sans", "ibm-plex-sans-latin-400-italic.woff2", "400", "italic"),
+             ("Lexend", "lexend-latin-wght-normal.woff2", "100 900", "normal")]
+    out = []
+    for fam, f, w, st in faces:
+        fp = d / f
+        if not fp.exists():
+            continue
+        b64 = base64.b64encode(fp.read_bytes()).decode()
+        out.append(f'@font-face{{font-family:"{fam}";font-style:{st};font-weight:{w};font-display:swap;src:url(data:font/woff2;base64,{b64}) format("woff2")}}')
+    return "\n".join(out) + "\n"
+
+
 def construir_html() -> Path:
     pagina = (SRC / "pagina.html").read_text(encoding="utf-8")
     js = (SRC / "app.js").read_text(encoding="utf-8")
     if "</script" in js.lower():
         raise SystemExit("app.js não pode conter </script>.")
     css = (SRC / "estilo-base.css").read_text(encoding="utf-8") + (SRC / "estilo-caderno.css").read_text(encoding="utf-8")
+    rework = SRC / "estilo-rework.css"
+    if rework.exists():
+        css += rework.read_text(encoding="utf-8")
+    css = css + "\n" + fontes_css()
     exemplos = (SRC / "exemplos.json").read_text(encoding="utf-8").replace("</", "<\\/")
     ex_proj = SRC / "exemplo-projeto.json"
     exemplo_projeto = ex_proj.read_text(encoding="utf-8").replace("</", "<\\/") if ex_proj.exists() else "null"

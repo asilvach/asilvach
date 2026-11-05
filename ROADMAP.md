@@ -23,6 +23,16 @@ Prioridade = valor no dia a dia ÷ esforço. ✅ feito · 🔜 próximo · 💡 
 | ✅ | Alertas: melancia, deriva, dores crónicas, reaberturas, decisões arrastadas, ações repetidas, convergência, satisfação, hesitação |
 | ✅ | Perguntas para a próxima reunião e relatório para o head |
 
+## v6: novo design
+
+| | Feature |
+|---|---|
+| ✅ | Tipografia própria embutida (Lexend nos títulos, IBM Plex Sans no texto; licença OFL, sem rede) |
+| ✅ | Barra superior com "Ir para…" e "Nova reunião" em todas as larguras; barra lateral mais leve |
+| ✅ | Início "A tua semana": uma frase com o essencial, última reunião, tarefas e saúde dos projetos |
+| ✅ | Secções separadas por linhas finas em vez de cartões; cores Natixis em OKLCH, claro e escuro |
+| ✅ | Animação só para estados, curvas próprias, `prefers-reduced-motion` respeitado |
+
 ## v2
 
 | | Feature | Para quê |

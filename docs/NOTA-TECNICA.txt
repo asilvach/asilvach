@@ -35,6 +35,8 @@ Rede
   default-src 'none'; connect-src 'none'; img-src data: blob:;
   script-src 'unsafe-inline'; style-src 'unsafe-inline'; ...
 - Sem CDNs, fontes remotas, analytics ou telemetria. O logótipo está embutido.
+- As fontes (Lexend e IBM Plex Sans, licença SIL Open Font License) vão
+  embutidas no próprio HTML (font-src data:), por isso não há descargas.
 
 Dados
 -----

@@ -1,7 +1,7 @@
 
-/* Hallmark · built: Claude Code · redesign of an app screen · shape: app screen · genre: modern-minimal · theme: custom · brand: Natixis (spec 2026-11-05, marca/brand-spec.md) · surface: tinted · nav: sidebar (meeting list is the destination set) · signature: the speaking ribbon (who spoke when) · motion: state only · v2.0.0 */
-/* Hallmark · pre-emit critique: P4 H4 E4 S4 R5 V3 · weakest: V, the sidebar-and-reader shell is the category's own; kept because the meeting list is the tool, and the ribbon carries the specificity */
-/* Hallmark · waive 1 · system UI face as the only family · Geomanist (the brand face) is licensed and cannot ship inside an offline file; app screens allow a familiar sans */
+/* Hallmark · built: Claude Code · redesign: full (v6) · shape: app screen · genre: modern-minimal · theme: custom · brand: Natixis (spec 2026-11-05, marca/brand-spec.md) · type: Lexend display + IBM Plex Sans body (OFL, embedded) · surface: tinted paper, hairline sections, cards only for interactive items · posture: restrained · nav: sidebar + appbar · signature: the speaking ribbon and the milestone trend · motion: state only · v2.0.0 */
+/* Hallmark · pre-emit critique: P4 H5 E4 S4 R5 V3 · weakest: V, sidebar-and-reader is the category shell; kept because the meeting list is the tool, the specificity lives in the ribbon, the milestone trend and the week sentence */
+/* Hallmark · answered F15 · one filled primary per page: the appbar "Nova reunião" is outlined so each page keeps its own primary */
 
 /* ═══════════ Tokens ═══════════
    Cores da marca extraídas de natixis.groupebpce.com (CSS oficial), não de memória.

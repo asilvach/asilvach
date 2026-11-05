@@ -1288,42 +1288,58 @@ function welcomePanel() {
       <button class="btn primary btn-lg" type="submit">Guardar</button></form>
   </section>`;
 }
+function homeSentence(mine, late) {
+  const since = addDays(TODAY, -7), week = meetings.filter(m => (m.date || '') >= since && (m.date || '') <= TODAY);
+  const hours = week.reduce((x, m) => x + (m.dur || 0), 0);
+  const parts = [];
+  parts.push(week.length ? `<b>${plural(week.length, 'reunião', 'reuniões')}</b> nos últimos 7 dias${hours >= 60 ? `, <b>${fmtDur(hours)}</b> em conversa` : ''}.` : 'Nenhuma reunião nos últimos 7 dias.');
+  if (mine.length) parts.push(`${knowsMe() ? 'Tens' : 'Há'} <b>${plural(mine.length, 'tarefa', 'tarefas')}</b> em aberto${late.length ? `, <b>${plural(late.length, 'atrasada', 'atrasadas')}</b>` : ''}.`);
+  else parts.push('Sem tarefas em aberto.');
+  const hot = projects().map(p => ({ p, M: projectMetrics(p) })).filter(x => x.M.health === 'bad' || x.M.health === 'warn');
+  if (hot.length) parts.push(hot.length === 1 ? `O projeto <b>${esc(hot[0].p.nome)}</b> ${hot[0].M.health === 'bad' ? 'está crítico' : 'pede atenção'}.` : `<b>${plural(hot.length, 'projeto pede', 'projetos pedem')}</b> atenção.`);
+  return parts.join(' ');
+}
 function viewHome() {
-  const sub = OWNER() ? `${esc(displayName(OWNER()))}, <span translate="no">${esc(TEAM())}</span>` : `<span translate="no">${esc(TEAM())}</span>`;
+  const who = OWNER() ? `${esc(displayName(OWNER()))}, <span translate="no">${esc(TEAM())}</span>` : `<span translate="no">${esc(TEAM())}</span>`;
   const month = TODAY.slice(0, 7), inMonth = meetings.filter(m => (m.date || '').startsWith(month));
   const open = allTodos.filter(t => !isDone(t)), mine = knowsMe() ? open.filter(mineTodo) : open;
   const late = mine.filter(t => t.due && t.due < TODAY);
   const withMe = meetings.filter(meOf).slice(0, 5);
-  const avgPct = withMe.length ? withMe.reduce((s, m) => s + meOf(m).pct, 0) / withMe.length : null;
-  const avgFair = withMe.length ? withMe.reduce((s, m) => s + 100 / Math.max(2, m.data.oradores.length), 0) / withMe.length : null;
+  const avgPct = withMe.length ? withMe.reduce((x, m) => x + meOf(m).pct, 0) / withMe.length : null;
+  const avgFair = withMe.length ? withMe.reduce((x, m) => x + 100 / Math.max(2, m.data.oradores.length), 0) / withMe.length : null;
   const next = mine.slice().sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999')).slice(0, 6);
   const last = meetings[0], lastTip = meetings.find(m => m.tip);
+  const ps = projects().map(p => ({ p, M: projectMetrics(p) }));
+  const recent = `<section class="panel" aria-labelledby="recent-h"><div class="panel-head"><h2 id="recent-h">Reuniões recentes</h2></div>
+    <div class="rows">${meetings.slice(0, 6).map(m => `<a class="row-link" href="${meetingHref(m)}"><div class="row-main"><div class="row-title">${esc(m.title)}</div><div class="row-sub"><span>${fmtDate(m.date, 'short')}</span>${m.dur ? `<span>${fmtDur(m.dur)}</span>` : ''}<span>${plural(m.people.length, 'pessoa', 'pessoas')}</span></div></div><span class="badge">${esc(m.type)}</span></a>`).join('')}</div></section>`;
+  const projPanel = ps.length ? `<section class="panel" aria-labelledby="hp-h"><div class="panel-head"><h2 id="hp-h">Projetos</h2><a class="btn-link" href="#/projetos">Ver todos</a></div>
+    <div class="rows">${ps.map(({ p, M }) => { const nx = M.marcos.find(x => !x.concluido); return `<a class="health-row" href="#/p/${encodeURIComponent(p.id)}"><div class="row-main" style="flex:1"><div class="row-title">${esc(p.nome)}</div><div class="row-sub">${nx ? `<span>${esc(nx.nome)}, ${fmtDate(nx.atual, 'short')}${nx.slip > 0 ? ` (+${nx.slip} d)` : ''}</span>` : ''}<span>${plural(M.alerts.length, 'alerta', 'alertas')}</span></div></div>${M.health ? `<span class="badge ${M.health}">${HEALTH_LABEL[M.health]}</span>` : ''}</a>`; }).join('')}</div></section>` : '';
   return `<div class="page wide">
-    <div class="page-head"><div><h1 tabindex="-1">Caderno de reuniões</h1><p class="page-sub">${sub}</p></div>
-      <div class="actions"><a class="btn primary btn-lg" href="#/nova">${icon('plus')}Nova reunião</a></div></div>
+    <div class="page-head" style="margin-bottom:var(--s-8)"><div><h1 tabindex="-1" class="home-h1">A tua semana</h1>
+      ${last ? `<p class="home-lead">${homeSentence(mine, late)}</p>` : ''}<p class="page-sub" style="font-size:var(--t-sm);color:var(--ink-3)">${who}, ${fmtDate(TODAY, 'weekday')}</p></div></div>
     <div class="stack">
       ${!OWNER() ? welcomePanel() : ''}
       ${usingExamples() ? `<div class="callout">${icon('info')}<p>Estas são <b>reuniões de exemplo</b>, para veres como fica. Desaparecem quando a primeira reunião tua entrar no caderno.</p></div>` : ''}
       ${OWNER() ? folderPanel(false) : ''}
       ${last ? `<div class="stats">
         <div class="stat"><div class="stat-v">${nf(inMonth.length)}</div><div class="stat-l">${inMonth.length === 1 ? 'Reunião' : 'Reuniões'} este mês</div><div class="stat-h">${nf(meetings.length)} no total</div></div>
-        <div class="stat"><div class="stat-v">${fmtDur(inMonth.reduce((s, m) => s + (m.dur || 0), 0))}</div><div class="stat-l">Em reuniões este mês</div><div class="stat-h">${fmtDur(meetings.reduce((s, m) => s + (m.dur || 0), 0))} no total</div></div>
+        <div class="stat"><div class="stat-v">${fmtDur(inMonth.reduce((x, m) => x + (m.dur || 0), 0))}</div><div class="stat-l">Em reuniões este mês</div><div class="stat-h">${fmtDur(meetings.reduce((x, m) => x + (m.dur || 0), 0))} no total</div></div>
         <div class="stat"><div class="stat-v">${nf(mine.length)}</div><div class="stat-l">${knowsMe() ? 'Tarefas tuas' : 'Tarefas'} em aberto${late.length ? `<span class="badge bad">${plural(late.length, 'atrasada', 'atrasadas')}</span>` : ''}</div><div class="stat-h">${nf(open.length)} da equipa</div></div>
         <div class="stat"><div class="stat-v">${avgPct == null ? '—' : pctf(avgPct)}</div><div class="stat-l">O teu tempo de fala</div><div class="stat-h">${avgPct == null ? 'Escolhe quem és ao adicionar uma reunião' : `Média de ${plural(withMe.length, 'reunião', 'reuniões')}; justo ${pctf(avgFair)}`}</div></div>
       </div>
       <section class="panel" aria-labelledby="last-h">
-        <div class="panel-head"><h2 id="last-h">Última reunião</h2><a class="btn-link" href="${meetingHref(last)}">Abrir a reunião</a></div>
-        <div class="row-title" style="font-size:var(--t-lg)">${esc(last.title)}</div>
-        <div class="row-sub" style="margin-top:var(--s-1)"><span>${fmtDate(last.date, 'weekday')}</span>${last.dur ? `<span>${fmtDur(last.dur)}</span>` : ''}<span>${esc(last.type)}</span></div>
+        <div class="panel-head"><h2 id="last-h">Última reunião</h2><span class="muted" style="font-size:var(--t-xs)">${fmtDate(last.date, 'weekday')}${last.dur ? `, ${fmtDur(last.dur)}` : ''}</span></div>
+        <a class="last-title" href="${meetingHref(last)}">${esc(last.title)}</a>
         ${ribbon(last)}
-        ${last.lead ? `<p style="margin:var(--s-3) 0 0;color:var(--ink-2);max-width:var(--measure)">${esc(curly(last.lead))}</p>` : ''}
+        ${last.lead ? `<p style="margin:var(--s-4) 0 0;color:var(--ink-2);max-width:var(--measure);font-size:var(--t-md)">${esc(curly(last.lead))}</p>` : ''}
+        <p style="margin:var(--s-4) 0 0"><a class="btn-link" href="${meetingHref(last)}">Abrir a reunião</a></p>
       </section>
       <div class="cols-2">
         <section class="panel" aria-labelledby="next-h"><div class="panel-head"><h2 id="next-h">${knowsMe() ? 'As tuas tarefas' : 'Tarefas em aberto'}</h2><a class="btn-link" href="#/tarefas">Ver todas</a></div>
           ${next.length ? `<div>${next.map(taskRow).join('')}</div>` : '<p class="muted">Nada pendente.</p>'}</section>
-        <section class="panel" aria-labelledby="recent-h"><div class="panel-head"><h2 id="recent-h">Reuniões recentes</h2></div>
-          <div class="rows">${meetings.slice(0, 6).map(m => `<a class="row-link" href="${meetingHref(m)}"><div class="row-main"><div class="row-title">${esc(m.title)}</div><div class="row-sub"><span>${fmtDate(m.date, 'short')}</span>${m.dur ? `<span>${fmtDur(m.dur)}</span>` : ''}<span>${plural(m.people.length, 'pessoa', 'pessoas')}</span></div></div><span class="badge">${esc(m.type)}</span></a>`).join('')}</div></section>
+        ${projPanel || recent}
       </div>
+      ${projPanel ? recent : ''}
       ${lastTip ? `<div class="tip"><strong>Foco de comunicação:</strong> ${esc(curly(lastTip.tip))} <a class="btn-link" href="#/evolucao">Ver a tua evolução</a></div>` : ''}` : ''}
     </div>
   </div>`;
@@ -1879,7 +1895,7 @@ clist.addEventListener('click', e => { const li = e.target.closest('.cmdk-item')
 clist.addEventListener('pointermove', e => { const li = e.target.closest('.cmdk-item'); if (li && +li.dataset.i !== csel) { csel = +li.dataset.i; cmdkMove(0); } });
 cmdk.addEventListener('click', e => { if (e.target === cmdk) cmdk.close(); });
 $('#cmdk-open').addEventListener('click', openCmdk);
-$('#cmdk-open-m').addEventListener('click', openCmdk);
+
 document.addEventListener('keydown', e => {
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName) || document.activeElement?.isContentEditable;
   if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') { e.preventDefault(); cmdk.open ? cmdk.close() : openCmdk(); return; }
