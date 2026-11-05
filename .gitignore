@@ -1,3 +1,6 @@
 # Transcrições em bruto (privadas)
 transcricoes/*
 !transcricoes/.gitkeep
+
+# Cópias de segurança do injetar.py
+*.bak
