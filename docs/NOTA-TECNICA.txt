@@ -1,0 +1,50 @@
+NOTA TÉCNICA PARA IT / SEGURANÇA DA INFORMAÇÃO
+Caderno de Reuniões · CIO Office Portugal
+==============================================
+
+Resumo
+------
+Ferramenta pessoal de produtividade: um único ficheiro HTML estático, aberto
+localmente no navegador (file://). Não há servidor, instalação, executáveis,
+macros, extensões nem dependências externas.
+
+O que o ficheiro faz
+--------------------
+- Lê localmente transcrições do Microsoft Teams (.vtt, .docx, .txt) escolhidas
+  pelo utilizador, e calcula métricas de participação (tempo de fala, etc.)
+  em JavaScript, no próprio navegador.
+- Gera um texto (pedido) que o utilizador copia manualmente para o assistente
+  de IA interno aprovado (Kilo Code). A resposta (JSON) é colada manualmente
+  de volta. O ficheiro nunca comunica com a IA nem com qualquer serviço.
+- Guarda os dados no armazenamento local do navegador (IndexedDB) e,
+  opcionalmente, num ficheiro .json escolhido pelo utilizador
+  (File System Access API, com autorização explícita do utilizador).
+
+Rede
+----
+- Zero pedidos de rede. A página declara uma Content-Security-Policy
+  restritiva que bloqueia ligações:
+  default-src 'none'; connect-src 'none'; img-src data: blob:;
+  script-src 'unsafe-inline'; style-src 'unsafe-inline'; ...
+- Sem CDNs, fontes remotas, analytics ou telemetria. O logótipo está embutido.
+
+Dados
+-----
+- Conteúdo: transcrições e resumos de reuniões internas (classificação
+  conforme a política interna aplicável às reuniões em causa).
+- Localização: perfil do navegador do utilizador e, se configurado, o ficheiro
+  .json na pasta escolhida pelo utilizador (ex.: OneDrive empresarial).
+- Partilha: nenhuma automática. Cada utilizador tem o seu próprio caderno.
+- Apagar: Definições > Apagar todas as reuniões; e apagar o ficheiro .json.
+
+Requisitos
+----------
+- Microsoft Edge ou Google Chrome atualizados (versões de 2023 em diante).
+- Políticas de grupo que possam afetar: bloqueio de JavaScript em file://,
+  DefaultFileSystemWriteGuardSetting (apenas desativa a gravação em ficheiro;
+  o caderno continua a funcionar com cópias de segurança manuais).
+
+Código
+------
+O código-fonte (HTML, CSS e JavaScript legíveis, sem minificação) está dentro do
+próprio ficheiro e pode ser revisto num editor de texto.

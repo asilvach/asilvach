@@ -1,0 +1,113 @@
+WEBVTT
+
+x/1-0
+00:00:03.000 --> 00:00:07.395
+<v Eu>Obrigada por estarem aqui. O objetivo de hoje é fecharmos o calendário</v>
+
+x/2-0
+00:00:07.537 --> 00:00:11.845
+<v Eu>de acesso à API de pagamentos para o Projeto Aurora. O que</v>
+
+x/3-0
+00:00:12.088 --> 00:00:14.023
+<v Eu>vos preocupa mais neste momento?</v>
+
+x/4-0
+00:00:14.964 --> 00:00:20.631
+<v Pedro Alves>Do nosso lado, a preocupação é o volume de pedidos no ambiente</v>
+
+x/5-0
+00:00:20.884 --> 00:00:26.369
+<v Pedro Alves>de testes. A última integração que abrimos gerou muitos incidentes.</v>
+
+x/6-0
+00:00:27.899 --> 00:00:32.809
+<v Eu>Percebo. Se limitarmos o ambiente de testes a mil pedidos por dia</v>
+
+x/7-0
+00:00:33.044 --> 00:00:36.680
+<v Eu>e vos enviarmos o plano de testes antes, isso resolve?</v>
+
+x/8-0
+00:00:37.586 --> 00:00:42.568
+<v Pedro Alves>Ajuda bastante. Mas, sinceramente, também temos pouca gente disponível em dezembro.</v>
+
+x/9-0
+00:00:43.260 --> 00:00:48.226
+<v Ana Costa>Isso preocupa-me. Se o acesso só abrir em janeiro, a fase dois</v>
+
+x/10-0
+00:00:48.449 --> 00:00:52.245
+<v Ana Costa>fica comprometida e o cliente não vai gostar.</v>
+
+x/11-0
+00:00:53.831 --> 00:00:58.897
+<v Eu>Vamos separar as coisas. Pedro, o que precisarias para abrir o acesso</v>
+
+x/12-0
+00:00:59.186 --> 00:01:02.179
+<v Eu>ainda em novembro, mesmo que com suporte limitado?</v>
+
+x/13-0
+00:01:02.857 --> 00:01:08.493
+<v Pedro Alves>Precisava que a vossa equipa assumisse o primeiro nível de suporte durante</v>
+
+x/14-0
+00:01:08.594 --> 00:01:14.743
+<v Pedro Alves>os testes. Assim só escalavam para nós o que fosse mesmo da</v>
+
+x/15-0
+00:01:15.018 --> 00:01:15.552
+<v Pedro Alves>API.</v>
+
+x/16-0
+00:01:16.805 --> 00:01:21.414
+<v Ana Costa>Conseguimos fazer isso, o Rui já conhece bem a documentação.</v>
+
+x/17-0
+00:01:22.578 --> 00:01:27.571
+<v Eu>Então a proposta fica: acesso em novembro, limite de mil pedidos por</v>
+
+x/18-0
+00:01:27.817 --> 00:01:32.663
+<v Eu>dia, nós fazemos o primeiro nível de suporte e enviamos o plano</v>
+
+x/19-0
+00:01:32.833 --> 00:01:37.151
+<v Eu>de testes até dia doze. Pedro, posso contar com a confirmação até</v>
+
+x/20-0
+00:01:37.399 --> 00:01:37.770
+<v Eu>sexta?</v>
+
+x/21-0
+00:01:39.486 --> 00:01:45.361
+<v Pedro Alves>Tenho de validar com o meu diretor, mas em princípio sim. Confirmo</v>
+
+x/22-0
+00:01:45.512 --> 00:01:46.601
+<v Pedro Alves>até sexta-feira.</v>
+
+x/23-0
+00:01:47.336 --> 00:01:49.750
+<v Ana Costa>E se o diretor não aprovar?</v>
+
+x/24-0
+00:01:51.224 --> 00:01:56.122
+<v Eu>Aí escalamos para o patrocinador do cliente, mas acredito que não vai</v>
+
+x/25-0
+00:01:56.209 --> 00:02:01.126
+<v Eu>ser preciso. Pedro, há mais alguma coisa que te deixe desconfortável com</v>
+
+x/26-0
+00:02:01.421 --> 00:02:02.214
+<v Eu>este plano?</v>
+
+x/27-0
+00:02:03.310 --> 00:02:08.404
+<v Pedro Alves>Não, assim parece-me equilibrado. Obrigado por terem ouvido a nossa parte.</v>
+
+x/28-0
+00:02:09.923 --> 00:02:12.696
+<v Eu>Obrigada eu. Resumo por email ainda hoje.</v>

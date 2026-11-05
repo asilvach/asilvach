@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="pt-PT">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<!-- Segurança: esta página não pode fazer nenhuma ligação à rede (sem internet, sem servidores). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; connect-src 'none'; font-src 'none'; frame-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'">
+<meta name="theme-color" content="#fdfcfe" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#100d12" media="(prefers-color-scheme: dark)">
+<title>Caderno de reuniões · CIO Office Portugal</title>
+<script>document.documentElement.classList.add('js');try{var t=localStorage.getItem('caderno:tema');t=t&&JSON.parse(t);if(t==='light'||t==='dark')document.documentElement.dataset.theme=t;}catch(e){}</script>
+<style>%%CSS%%</style>
+</head>
+<body>
+<a class="skip" href="#view">Saltar para o conteúdo</a>
+<noscript><p class="noscript">Este caderno precisa de JavaScript. Abre-o no Microsoft Edge ou no Google Chrome.</p></noscript>
+<div class="app">
+  <aside id="sidebar" aria-label="Caderno">
+    <div class="brand">
+      <a class="brand-logo" href="#/" aria-label="Início do caderno" translate="no">%%LOGO%%</a>
+      <div class="brand-team"><b translate="no" id="brand-team">CIO Office Portugal</b><span id="brand-owner">Caderno de reuniões</span></div>
+    </div>
+    <div style="padding:0 var(--s-3) var(--s-2)"><a class="btn primary btn-lg" href="#/nova" style="width:100%;justify-content:center"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>Nova reunião</a></div>
+    <button class="cmdk-trigger" type="button" id="cmdk-open" aria-keyshortcuts="Control+K Meta+K">
+      <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <span>Ir para…</span><kbd class="kbd" id="cmdk-kbd">Ctrl&nbsp;K</kbd>
+    </button>
+    <nav class="nav" id="nav" aria-label="Vistas"></nav>
+    <div class="list-head">
+      <div class="list-title"><span>Reuniões</span><output id="list-count" aria-live="polite"></output></div>
+      <div class="field">
+        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+        <label class="sr-only" for="search">Pesquisar em todas as reuniões</label>
+        <input class="input" type="search" id="search" name="pesquisa" placeholder="Pesquisar, ex.: orçamento…" autocomplete="off" spellcheck="false" aria-controls="list" aria-keyshortcuts="/">
+      </div>
+      <div class="chips" id="chips" role="group" aria-label="Filtrar por tipo"></div>
+    </div>
+    <div id="list"></div>
+    <div class="side-foot"><span class="save-state" id="save-state" aria-live="polite">Offline. Tudo fica neste computador.</span><button class="icon-btn" id="theme-btn" type="button"></button></div>
+  </aside>
+  <div class="scrim" id="scrim"></div>
+  <div id="main">
+    <div class="topbar">
+      <button class="icon-btn" type="button" id="menu-btn" aria-label="Abrir menu" aria-controls="sidebar" aria-expanded="false"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+      <strong id="topbar-title">Caderno de reuniões</strong>
+      <button class="icon-btn" type="button" id="cmdk-open-m" aria-label="Pesquisar e ir para…"><svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg></button>
+    </div>
+    <main id="view" tabindex="-1"></main>
+  </div>
+</div>
+
+<dialog id="cmdk" aria-label="Ir para">
+  <div class="cmdk-input">
+    <svg class="icon" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="cmdk-q" type="text" name="ir-para" placeholder="Reuniões, pessoas, tarefas ou ações…" autocomplete="off" spellcheck="false" role="combobox" aria-expanded="true" aria-controls="cmdk-list" aria-autocomplete="list" aria-label="Procurar">
+    <kbd class="kbd">Esc</kbd>
+  </div>
+  <ul id="cmdk-list" role="listbox" aria-label="Resultados"></ul>
+  <div class="cmdk-foot"><span><kbd class="kbd">↑</kbd><kbd class="kbd">↓</kbd> navegar</span><span><kbd class="kbd">Enter</kbd> abrir</span><span><kbd class="kbd">J</kbd><kbd class="kbd">K</kbd> reunião seguinte e anterior</span></div>
+</dialog>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<input type="file" id="file-in" accept=".vtt,.docx,.txt,text/vtt,text/plain" hidden>
+<input type="file" id="import-in" accept=".json,application/json" hidden>
+
+<!-- Reuniões de exemplo (só aparecem enquanto o caderno não tiver reuniões tuas) -->
+<script type="application/json" id="exemplos">%%EXEMPLOS%%</script>
+
+<!-- LÓGICA DO CADERNO -->
+<script>%%JS%%</script>
+</body>
+</html>

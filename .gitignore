@@ -9,3 +9,7 @@ transcricoes/*
 caderno_reunioes.html
 config.json
 __pycache__/
+
+# Ficheiros de dados pessoais do caderno
+caderno-reunioes-dados*.json
+caderno-reunioes-copia*.json

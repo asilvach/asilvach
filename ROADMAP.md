@@ -1,8 +1,19 @@
-# Roadmap — Caderno de Reuniões
+# Roadmap · Caderno de Reuniões
 
 Prioridade = valor no dia a dia ÷ esforço. ✅ feito · 🔜 próximo · 💡 ideia
 
-## v2 (atual)
+## v4 (atual): caderno autónomo para ambiente fechado
+
+| | Feature |
+|---|---|
+| ✅ | Um só ficheiro HTML offline; sem Python, servidor ou agente |
+| ✅ | Lê `.vtt`, `.docx` e texto do Teams; métricas calculadas no navegador |
+| ✅ | Assistente "Nova reunião" em 4 passos; pedido gerado para o Kilo Code; resposta JSON validada |
+| ✅ | Contexto de reuniões anteriores e fecho automático de tarefas pendentes |
+| ✅ | Temas com minutos, transcrição completa, "Copiar ata" |
+| ✅ | Ficheiro de dados no OneDrive, cópias de segurança, CSP sem rede, nota técnica para IT |
+
+## v2
 
 | | Feature | Para quê |
 |---|---|---|
@@ -20,7 +31,7 @@ Prioridade = valor no dia a dia ÷ esforço. ✅ feito · 🔜 próximo · 💡 
 ## 🔜 Próximo (maior impacto)
 
 1. **Processar em lote** — `/reuniao transcricoes/*.vtt`: processa todas as transcrições novas de uma vez (saltando as que já estão no caderno).
-2. **Suporte a `.docx` do Teams e a Plaud** — o analisador passa a ler também o `.docx` exportado pelo Teams e as transcrições do Plaud (já há um conector Plaud nesta conta).
+2. ~~Suporte a `.docx` do Teams~~ (feito na v4). **Plaud** — o analisador passa a ler também o `.docx` exportado pelo Teams e as transcrições do Plaud (já há um conector Plaud nesta conta).
 3. **Briefing pré-reunião** — `/preparar <pessoa ou projeto>`: junta as últimas reuniões, as decisões, as tarefas em aberto e o histórico de comunicação com essas pessoas numa página de preparação.
 4. **Resumo semanal** — `/semana`: decisões, tarefas criadas/fechadas, horas em reuniões e evolução da comunicação, com uma sugestão de foco para a semana seguinte.
 5. **Decisões globais** — vista "Decisões", pesquisável, com data e reunião de origem. Responde a "quando é que decidimos X?".
