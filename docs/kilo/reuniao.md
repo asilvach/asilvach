@@ -19,10 +19,13 @@ Atualiza o Caderno de Reuniões: cria um resumo para cada transcrição nova da 
    d. Volta a ler o ficheiro que criaste e confirma que é JSON válido e completo; se não for,
       corrige-o. Se o ficheiro já não estiver na pasta, é porque o caderno já o importou:
       está tudo bem, não o voltes a criar.
-3. Trata as transcrições uma de cada vez, até não haver mais.
-4. Não alteres, não movas e não apagues nenhum outro ficheiro. O caderno importa as respostas
+3. Trata também os pedidos sem transcrição, como `entrada/NOME.historico.pedido.md`
+   (reconstrução do histórico de um projeto): se ainda não existir `entrada/NOME.historico.resposta.json`,
+   lê o pedido inteiro, segue-o à letra e cria esse ficheiro só com o JSON pedido.
+4. Trata as transcrições e os pedidos um de cada vez, até não haver mais.
+5. Não alteres, não movas e não apagues nenhum outro ficheiro. O caderno importa as respostas
    e arruma a pasta sozinho na próxima vez que estiver aberto.
-5. No fim, responde numa linha por reunião: o título e o número de tarefas. Lembra que a
+6. No fim, responde numa linha por reunião: o título e o número de tarefas. Lembra que a
    reunião aparece no caderno quando ele estiver aberto no Edge.
 
 Indicação extra do utilizador (opcional, por exemplo um tipo de resumo): $ARGUMENTS

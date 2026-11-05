@@ -82,3 +82,25 @@
 .r-sec > h2 { font-size: var(--t-lg); font-weight: 600; margin: 0 0 var(--s-4); scroll-margin-top: var(--s-4); }
 @media (max-width: 60rem) { .form-grid { grid-template-columns: minmax(0, 1fr); } .step { padding: var(--s-4); } }
 @media print { .transcript:not([open]), .r-actions, .actions { display: none !important; } }
+
+/* ═══════════ Projetos (PMO) ═══════════ */
+.chart .grid-l { stroke: var(--line); }
+.chart .diag { stroke: var(--edge); stroke-dasharray: 4 4; }
+.chart .mta-line { fill: none; stroke: var(--c); stroke-width: 2; stroke-linejoin: round; }
+.chart .mta-dot { fill: var(--paper); stroke: var(--c); stroke-width: 2; }
+.chart .mta-label { fill: var(--ink-2); font: 600 11px var(--font-ui); }
+.chart .line-scope { fill: none; stroke: var(--ink-3); stroke-width: 2; stroke-dasharray: 5 4; }
+.chart .bar-new { fill: var(--coral); opacity: .55; }
+.rag-strip { display: flex; gap: 3px; }
+.rag-cell { flex: 1; min-width: 8px; height: 28px; border-radius: 4px; background: var(--fill); }
+.rag-cell.ok { background: var(--ok); } .rag-cell.warn { background: var(--warn); } .rag-cell.bad { background: var(--bad); }
+.rag-axis { display: flex; justify-content: space-between; font-size: var(--t-xs); color: var(--ink-3); margin-top: var(--s-1); font-variant-numeric: tabular-nums; }
+blockquote.quote { margin: var(--s-3) 0 0; padding-left: var(--s-4); border-left: 2px solid var(--brand-line); color: var(--ink-2); font-style: italic; }
+.proj-pick { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; margin-top: var(--s-3); }
+details.panel > summary { list-style: none; }
+details.panel > summary::-webkit-details-marker { display: none; }
+.verdicts b { font-weight: 600; }
+@media (max-width: 60rem) { .rag-cell { min-width: 4px; } }
+.status-line.warn { background: var(--warn-soft); color: var(--warn); }
+.legend { display: flex; flex-wrap: wrap; gap: var(--s-1) var(--s-5); font-size: var(--t-sm); color: var(--ink-2); }
+.legend > span { display: inline-flex; align-items: center; gap: var(--s-2); }

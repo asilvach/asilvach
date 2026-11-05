@@ -27,6 +27,14 @@ Kilo Code, valida a resposta (JSON) que a pessoa cola de volta e guarda tudo loc
   Exportar/importar cópia nas Definições.
 - Contexto e seguimento: o pedido inclui reuniões anteriores com as mesmas pessoas e as tarefas
   em aberto (códigos T1…); a resposta indica `tarefas_concluidas` e o caderno fecha-as.
+- **Projetos (PMO):** `STATE.projetos` (nome, descrição, palavras, pessoas); `rec.projeto` associa a
+  reunião. A resposta da IA traz `pmo` (estado RAG, marcos, backlog, riscos, decisões pendentes,
+  satisfação, adoção, perguntas) com códigos estáveis M/B/R/D; `assignCodes` reconhece itens pelo
+  título quando falta o código. `projectMetrics` calcula a linha do tempo e os alertas (melancia,
+  deriva de marcos, dores crónicas, itens reabertos, decisões arrastadas, ações repetidas/zombie,
+  backlog que não converge, satisfação a descer, linguagem hesitante). "Reconstruir o histórico"
+  gera `entrada/NOME.historico.pedido.md` (ou copiar-colar) a partir das atas guardadas.
+  `src/exemplo-projeto.json` é o projeto de exemplo (#/p/exemplo).
 - Segurança: CSP sem rede (`connect-src 'none'`), sem dependências externas, logótipo embutido.
 
 ## Estrutura

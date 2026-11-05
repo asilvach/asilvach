@@ -13,6 +13,16 @@ Prioridade = valor no dia a dia ÷ esforço. ✅ feito · 🔜 próximo · 💡 
 | ✅ | Temas com minutos, transcrição completa, "Copiar ata" |
 | ✅ | Ficheiro de dados no OneDrive, cópias de segurança, CSP sem rede, nota técnica para IT |
 
+## v5: Projetos (PMO crítico)
+
+| | Feature |
+|---|---|
+| ✅ | Projetos declarados, sugeridos (pessoas/temas recorrentes) e associados pelo Kilo Code |
+| ✅ | Extração PMO por reunião com códigos estáveis; reconstrução do histórico a partir das atas |
+| ✅ | Tendência de marcos (MTA), estado reunião a reunião, burn-up do backlog |
+| ✅ | Alertas: melancia, deriva, dores crónicas, reaberturas, decisões arrastadas, ações repetidas, convergência, satisfação, hesitação |
+| ✅ | Perguntas para a próxima reunião e relatório para o head |
+
 ## v2
 
 | | Feature | Para quê |

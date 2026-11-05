@@ -26,6 +26,14 @@ Em cada reunião
    (Ou, no Kilo Code do VS Code, escreve "atualiza o caderno".)
 3. O caderno abre sozinho no fim, com a reunião nova.
 
+Projetos (acompanhamento de PMO)
+--------------------------------
+Em "Projetos", cria um projeto (ex.: o nome do projeto e as pessoas com quem
+o acompanhas), confirma as reuniões e clica em "Reconstruir o histórico".
+O caderno mostra a evolução: datas dos marcos, backlog, riscos, decisões
+por tomar, satisfação, alertas e perguntas para a próxima reunião.
+Há um projeto de exemplo para veres como fica.
+
 Para experimentar: copia o ficheiro da pasta "Exemplo para experimentar"
 para a pasta "entrada".
 

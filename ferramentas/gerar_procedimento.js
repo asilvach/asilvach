@@ -52,6 +52,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await snap('reuniao');
     await top('#pa-h'); await snap('plano', 'section[aria-labelledby=pa-h]');
     await p.goto(URL + '#/tarefas'); await sleep(400); await snap('tarefas');
+    await p.goto(URL + '#/p/exemplo'); await sleep(600); await snap('projeto');
+    await top('#mta-h'); await sleep(100); await snap('mta', 'section[aria-labelledby=mta-h]');
     // Plano B: copiar e colar
     await p.goto(URL + '#/nova'); await sleep(400);
     await p.setInputFiles('#file-in', { name: '2026-11-04 Fornecedor pagamentos.vtt', mimeType: 'text/vtt', buffer: Buffer.from(vtt) }); await sleep(500);
@@ -129,7 +131,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
     <section class="break"><h2>Vista Tarefas</h2><p>Junta as ações de todas as reuniões, por prazo. As atrasadas aparecem primeiro.</p>${img('tarefas', 'Vista Tarefas')}</section>
 
-    <section><h2>Plano B: copiar e colar</h2>
+    <section class="break"><h2>Projetos: a evolução ao longo das reuniões</h2>
+      <p>Em <b>Projetos</b>, o caderno acompanha um projeto como um PMO crítico. Cria o projeto (nome, descrição, palavras-chave, pessoas), confirma as reuniões que lhe pertencem e clica em <b>Reconstruir o histórico</b>. A partir daí, cada reunião nova atualiza marcos, backlog, riscos e decisões.</p>
+      ${img('projeto', 'Página de um projeto')}
+      <p class="tip">O caderno também sugere projetos sozinho quando vê a mesma pessoa ou o mesmo tema em 3 ou mais reuniões.</p></section>
+
+    <section><h2>Tendência dos marcos</h2>
+      <p>Cada linha é a data prevista de um marco, reunião a reunião. Uma linha plana é um projeto controlado; uma linha a subir é um projeto a escorregar. Os alertas assinalam, por exemplo, quando o estado é dado como verde no mesmo dia em que uma data muda.</p>
+      ${img('mta', 'Tendência dos marcos')}</section>
+
+    <section class="break"><h2>Plano B: copiar e colar</h2>
       <p>Se o modo pasta não estiver disponível: em <b>Nova reunião</b>, desce até <b>Sem a pasta: copiar e colar</b>, escolhe o ficheiro, clica em <b>Copiar pedido</b>, cola no Kilo Code, copia a resposta e cola-a no passo 4.</p>
       ${img('b1', 'Plano B, passo 1')}${img('b4', 'Plano B, passo 4')}</section>
 

@@ -81,6 +81,7 @@ const ICONS = {
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
+  folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10h18"/>',
   save: '<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h8V3M8 21v-7h8v7"/>',
 };
 const icon = (n, cls = '') => `<svg class="icon ${cls}" viewBox="0 0 24 24" aria-hidden="true">${ICONS[n] || ''}</svg>`;
@@ -205,9 +206,10 @@ function analyse(turns, euAlias) {
    Dados: IndexedDB do navegador e, com o modo pasta, o ficheiro caderno-dados.json na pasta do caderno.
    Modo pasta: o caderno vigia entrada/, prepara um .pedido.md por transcrição e importa o .resposta.json
    que o Kilo Code lá escreve. */
-const DEFAULT_STATE = { versao: 2, guardado_em: null, dono: '', aliases: [], equipa: 'CIO Office Portugal', modelo_padrao: 'auto', reunioes: [], fila: [], importados: [] };
+const DEFAULT_STATE = { versao: 2, guardado_em: null, dono: '', aliases: [], equipa: 'CIO Office Portugal', modelo_padrao: 'auto', reunioes: [], fila: [], importados: [], projetos: [] };
 let STATE = structuredClone(DEFAULT_STATE);
 let EXEMPLOS = []; try { EXEMPLOS = JSON.parse($('#exemplos').textContent) || []; } catch (e) {}
+let EXEMPLO_PROJETO = null; try { EXEMPLO_PROJETO = JSON.parse($('#exemplo-projeto')?.textContent || 'null'); } catch (e) {}
 let dirHandle = null, dirPerm = 'none', inboxBusy = false;
 let INBOX = { aguardar: [], quem: [], erros: [] }; // aguardar: pedidos à espera do Kilo Code; quem: transcrições sem "quem és tu"
 const INSTR_FILE = 'instrucoes-para-o-kilo.md', DATA_FILE = 'caderno-dados.json', INBOX_DIR = 'entrada', DONE_DIR = 'processadas';
@@ -219,7 +221,7 @@ const idb = (() => {
   const op = (mode, fn) => open().then(db => new Promise((res, rej) => { const t = db.transaction('kv', mode), q = fn(t.objectStore('kv')); t.oncomplete = () => res(q.result); t.onerror = () => rej(t.error); t.onabort = () => rej(t.error); }));
   return { get: k => op('readonly', s => s.get(k)), set: (k, v) => op('readwrite', s => s.put(v, k)), del: k => op('readwrite', s => s.delete(k)) };
 })();
-const fixState = s => { const st = Object.assign(structuredClone(DEFAULT_STATE), s || {}); if (!Array.isArray(st.fila)) st.fila = []; if (!Array.isArray(st.importados)) st.importados = []; return st; };
+const fixState = s => { const st = Object.assign(structuredClone(DEFAULT_STATE), s || {}); if (!Array.isArray(st.fila)) st.fila = []; if (!Array.isArray(st.importados)) st.importados = []; if (!Array.isArray(st.projetos)) st.projetos = []; return st; };
 async function loadState() {
   let s = null;
   try { s = await idb.get('estado'); } catch (e) { console.warn('IndexedDB indisponível', e); }
@@ -320,10 +322,16 @@ function recordFromJob(job, p) {
   const names = job.data ? job.data.oradores.map(o => o.nome) : [...new Set(job.turns.map(t => t.speaker))];
   const order = Object.fromEntries(names.map((n, i) => [n, i]));
   const tipo = p.tipo || (MODELOS[job.modelo] || MODELOS.ata).nome;
-  return {
+  const rec = {
     id: `${job.date}-${slug(p.titulo || 'reuniao')}-${uid().slice(-4)}`, criado_em: new Date().toISOString(), data: job.date, tipo, fonte: job.fonte, aproximado: job.aproximado, eu: job.alias || null, ficheiro: job.ficheiro || null,
     oradores: names, falas: job.turns.map(t => [+t.start.toFixed(2), +t.end.toFixed(2), order[t.speaker], t.text, +t.spoken.toFixed(2)]), conteudo: p, notas: '',
   };
+  linkProject(rec);
+  return rec;
+}
+function linkProject(rec) {
+  const pmo = rec.conteudo?.pmo; const p = pmo && matchProject(pmo.projeto);
+  if (p) { rec.projeto = p.id; pmo.projeto = p.nome; assignCodes(p, pmo, meetings); }
 }
 function closePending(p, codes, recId) {
   for (const code of p.tarefas_concluidas || []) {
@@ -354,6 +362,16 @@ async function scanInbox() {
     const aguardar = [], quem = [], erros = [];
     let imported = 0, changed = false;
     for (const [b, o] of bases) {
+      if (!o.transcricao && /\.historico$/.test(b)) {
+        const pid = (STATE.historicos || {})[b], pp = pid && projectById(pid);
+        if (o.resposta && pp) {
+          const rf = await fileFromInbox(inbox, o.resposta);
+          if (Date.now() - rf.lastModified < 8000) { aguardar.push({ base: b, ficheiro: `histórico de ${pp.nome}` }); continue; }
+          try { const n = applyHistory(pp, await rf.text()); delete STATE.historicos[b]; changed = true; imported++; await moveToDone(inbox, [o.pedido, o.resposta, o.erro].filter(Boolean)); toast(`Histórico de ${pp.nome}: ${plural(n, 'reunião atualizada', 'reuniões atualizadas')}.`); }
+          catch (err) { await writeFile(inbox, `${b}.erro.txt`, `A resposta do Kilo Code para o histórico de "${pp.nome}" não é válida:\n${err.message}\n\nNo Kilo Code escreve outra vez /reuniao para a refazer.\n`); await inbox.removeEntry(o.resposta); erros.push({ base: b, msg: err.message }); }
+        } else if (o.pedido && pp) aguardar.push({ base: b, ficheiro: `histórico de ${pp.nome}` });
+        continue;
+      }
       if (!o.transcricao) continue;
       if (STATE.importados.includes(b)) { await moveToDone(inbox, [o.transcricao, o.pedido, o.resposta, o.erro].filter(Boolean)); continue; }
       const job0 = STATE.fila.find(j => j.base === b);
@@ -401,7 +419,7 @@ async function scanInbox() {
     const liveBases = new Set([...bases.entries()].filter(([, o]) => o.transcricao).map(([b]) => b));
     if (STATE.fila.some(j => !liveBases.has(j.base))) { STATE.fila = STATE.fila.filter(j => liveBases.has(j.base)); changed = true; }
     INBOX = { aguardar, quem, erros };
-    if (changed) { await persist(); if (imported) { renderList(); renderNav(); } }
+    if (changed) { await persist(); if (imported) { rebuild(); renderList(); renderNav(); if (current?.view === 'p') route(); } }
     if (changed || JSON.stringify(INBOX) !== before) refreshInboxUI();
   } catch (e) {
     if (e.name === 'NotAllowedError' || e.name === 'SecurityError') { dirPerm = 'prompt'; renderSaveState(); }
@@ -552,6 +570,7 @@ ${ctx}
 TAREFAS EM ABERTO DE REUNIÕES ANTERIORES (se a transcrição mostrar que alguma foi feita, põe o código em "tarefas_concluidas"):
 ${pend}
 
+${projectsPromptBlock(w.generic ? null : w.date)}
 REGRAS
 - Ignora ruído, cumprimentos e conversa de circunstância ("estão a ouvir-me?"). Corrige pelo contexto os erros de reconhecimento de voz do Teams.
 - Mantém exatos nomes, números, valores, datas e prazos. Nunca inventes: se algo não for claro, escreve "(a confirmar)".
@@ -575,7 +594,7 @@ ${secs}
   ],
   "tarefas": [{"acao": "...", "responsavel": "Nome", "prazo": "AAAA-MM-DD", "minuto": "mm:ss"}],
   "tarefas_concluidas": ["T1"],
-  "radar": {"correu_bem": ["..."], "a_melhorar": ["..."], "experimenta": "..."}
+  "radar": {"correu_bem": ["..."], "a_melhorar": ["..."], "experimenta": "..."}${projects().length ? ',\n  ' + PMO_SCHEMA : ''}
 }
 
 ${w.generic ? 'TRANSCRIÇÃO: lê o ficheiro da transcrição inteiro (.vtt, .docx ou .txt na pasta entrada). Cada fala tem o nome de quem fala e os tempos.' : `TRANSCRIÇÃO (${w.turns.length} intervenções${d ? ', ' + fmtDur(d.duracao_s) : ''}):\n${lines}`}`;
@@ -615,10 +634,268 @@ function normalizeAI(o, modelo) {
     seccoes: arr(o.seccoes).map(sec).filter(Boolean),
     tarefas: arr(o.tarefas).map(t => ({ acao: str(t?.acao || t?.tarefa), responsavel: str(t?.responsavel), prazo: date(t?.prazo), minuto: str(t?.minuto), feito: false })).filter(t => t.acao),
     tarefas_concluidas: arr(o.tarefas_concluidas).map(str).filter(Boolean),
+    pmo: normalizePMO(o.pmo),
     radar: { correu_bem: arr(o.radar?.correu_bem).map(str).filter(Boolean), a_melhorar: arr(o.radar?.a_melhorar).map(str).filter(Boolean), experimenta: str(o.radar?.experimenta) },
   };
   if (!c.resumo && !c.seccoes.length && !c.tarefas.length) throw new Error('A resposta não tem resumo, secções nem tarefas. Confirma que copiaste a resposta do Kilo Code a este pedido.');
   return c;
+}
+
+/* ════════════════ Projetos (PMO crítico) ════════════════
+   Um projeto é declarado pela pessoa (nome, descrição, palavras-chave, pessoas). Cada reunião pode
+   pertencer a um projeto (rec.projeto). O Kilo Code extrai, por reunião, um bloco "pmo" que ATUALIZA
+   itens com código estável (M marcos, B backlog, R riscos, D decisões pendentes). O caderno junta tudo
+   numa linha do tempo e calcula métricas e alertas. */
+const PMO_KINDS = [['marcos', 'M', 'nome'], ['backlog', 'B', 'titulo'], ['riscos', 'R', 'titulo'], ['decisoes_pendentes', 'D', 'titulo']];
+const DELIVERED = ['entregue', 'validado'];
+const projects = () => STATE.projetos || [];
+let DEMO = null; // projeto de exemplo (só para ver como fica)
+const projectById = id => id === 'exemplo' ? DEMO?.p : projects().find(p => p.id === id);
+const meetingsOf = (p, list) => (list || (p.id === 'exemplo' ? DEMO.meetings : meetings)).filter(m => m.rec.projeto === p.id).slice().sort((a, b) => (a.date || '').localeCompare(b.date || '') || (a.rec.criado_em || '').localeCompare(b.rec.criado_em || ''));
+const tokensOf = s => norm(s).split(/[^a-z0-9]+/).filter(w => w.length > 2);
+const similar = (a, b) => { const x = new Set(tokensOf(a)), y = tokensOf(b); if (!x.size || !y.length) return false; const inter = y.filter(w => x.has(w)).length; return inter / Math.max(x.size, y.length) >= 0.6; };
+
+function normalizePMO(o) {
+  if (!o || typeof o !== 'object') return null;
+  const str = v => typeof v === 'string' ? v.trim() : (v == null ? '' : String(v));
+  const arr = v => Array.isArray(v) ? v : (v ? [v] : []);
+  const pick = (v, list, def) => { const n = norm(str(v)).replace(/\s+/g, '-'); return list.find(x => n === x || n.startsWith(x)) || def; };
+  const code = v => { const s = str(v).toUpperCase(); return /^[MBRD]\d+$/.test(s) ? s : null; };
+  const date = v => isISO(str(v)) ? str(v) : null;
+  const RAG = { verde: 'verde', green: 'verde', amarelo: 'amarelo', amber: 'amarelo', yellow: 'amarelo', laranja: 'amarelo', vermelho: 'vermelho', red: 'vermelho' };
+  const num = (v, lo, hi) => v === null || v === '' || v === undefined || !isFinite(+v) ? null : Math.max(lo, Math.min(hi, +v));
+  const out = {
+    projeto: str(o.projeto) || null,
+    estado: o.estado && typeof o.estado === 'object' ? { rag: RAG[norm(str(o.estado.rag))] || null, razao: str(o.estado.razao), explicito: !!o.estado.explicito } : null,
+    marcos: arr(o.marcos).map(x => ({ codigo: code(x?.codigo), nome: str(x?.nome), data_prevista: date(x?.data_prevista), concluido: !!x?.concluido, nota: str(x?.nota) })).filter(x => x.nome || x.codigo),
+    backlog: arr(o.backlog).map(x => ({ codigo: code(x?.codigo), titulo: str(x?.titulo), tipo: pick(x?.tipo, ['pedido', 'melhoria', 'bug', 'dor'], 'pedido'), versao: (str(x?.versao).toUpperCase().match(/V\d+/) || [null])[0], prioridade: pick(x?.prioridade, ['must-have', 'sonho', 'normal'], 'normal'), estado: pick(x?.estado, ['novo', 'analise', 'desenvolvimento', 'entregue', 'validado', 'recusado'], 'novo'), nota: str(x?.nota) })).filter(x => x.titulo || x.codigo),
+    riscos: arr(o.riscos).map(x => ({ codigo: code(x?.codigo), titulo: str(x?.titulo), gravidade: pick(x?.gravidade, ['alta', 'media', 'baixa'], 'media'), estado: pick(x?.estado, ['aberto', 'mitigado', 'fechado', 'materializado'], 'aberto'), responsavel: str(x?.responsavel), mitigacao: str(x?.mitigacao) })).filter(x => x.titulo || x.codigo),
+    decisoes_pendentes: arr(o.decisoes_pendentes).map(x => ({ codigo: code(x?.codigo), titulo: str(x?.titulo), estado: pick(x?.estado, ['pendente', 'decidida'], 'pendente'), decisao: str(x?.decisao) })).filter(x => x.titulo || x.codigo),
+    satisfacao: o.satisfacao && typeof o.satisfacao === 'object' && num(o.satisfacao.nota, -2, 2) !== null ? { nota: num(o.satisfacao.nota, -2, 2), evidencia: str(o.satisfacao.evidencia) } : null,
+    adocao: o.adocao && typeof o.adocao === 'object' ? { percentagem: num(o.adocao.percentagem, 0, 100), ainda_manual: arr(o.adocao.ainda_manual).map(str).filter(Boolean) } : null,
+    perguntas_pmo: arr(o.perguntas_pmo).map(str).filter(Boolean).slice(0, 6),
+  };
+  return out;
+}
+
+/* Linha do tempo: aplica os blocos pmo das reuniões, por ordem de data */
+function projectTimeline(p, list) {
+  const ms = meetingsOf(p, list);
+  const maps = Object.fromEntries(PMO_KINDS.map(([k]) => [k, new Map()]));
+  const snaps = [];
+  for (const m of ms) {
+    const pmo = m.c.pmo;
+    if (pmo) for (const [kind, , label] of PMO_KINDS) for (const it of pmo[kind] || []) {
+      if (!it.codigo) continue;
+      const map = maps[kind], prev = map.get(it.codigo);
+      const e = prev || { codigo: it.codigo, hist: [], first: m.date, firstId: m.id, mentions: 0 };
+      for (const [k, v] of Object.entries(it)) if (k !== 'codigo' && v !== '' && v !== null && v !== undefined) e[k] = v;
+      if (!e[label]) e[label] = it[label] || e[label] || it.codigo;
+      e.mentions++; e.last = m.date; e.lastId = m.id;
+      e.hist.push({ date: m.date, id: m.id, ...it });
+      map.set(it.codigo, e);
+    }
+    const back = [...maps.backlog.values()];
+    snaps.push({
+      m, pmo, date: m.date,
+      rag: pmo?.estado?.rag || null,
+      pedidos: back.length, entregues: back.filter(b => DELIVERED.includes(b.estado)).length,
+      novos: (pmo?.backlog || []).filter(b => b.codigo && maps.backlog.get(b.codigo)?.firstId === m.id).length,
+      riscos: ['alta', 'media', 'baixa'].map(g => [...maps.riscos.values()].filter(r => r.gravidade === g && ['aberto', 'materializado'].includes(r.estado)).length),
+      decisoes: [...maps.decisoes_pendentes.values()].filter(d => d.estado === 'pendente').length,
+      satisfacao: pmo?.satisfacao?.nota ?? null, adocao: pmo?.adocao?.percentagem ?? null,
+      marcos: Object.fromEntries([...maps.marcos.values()].map(x => [x.codigo, x.data_prevista])),
+    });
+  }
+  return { ms, maps, snaps };
+}
+/* Dá código aos itens novos (ou reconhece-os pelo título, se o Kilo Code não reutilizou o código) */
+function assignCodes(p, pmo, list, excludeId) {
+  if (!pmo) return;
+  const tl = projectTimeline(p, (list || meetings).filter(m => m.id !== excludeId));
+  for (const [kind, prefix, label] of PMO_KINDS) {
+    const map = tl.maps[kind];
+    let next = Math.max(0, ...[...map.keys()].map(c => +c.slice(1) || 0)) + 1;
+    const used = new Set(map.keys());
+    for (const it of pmo[kind] || []) {
+      if (it.codigo && !it.codigo.startsWith(prefix)) it.codigo = null;
+      if (it.codigo && (used.has(it.codigo) || !map.size)) { used.add(it.codigo); continue; }
+      const match = [...map.values()].find(e => similar(e[label] || '', it[label] || ''));
+      if (match) it.codigo = match.codigo;
+      else if (!it.codigo || used.has(it.codigo)) { while (used.has(prefix + next)) next++; it.codigo = prefix + next++; }
+      used.add(it.codigo);
+    }
+  }
+}
+function matchProject(name) { if (!name) return null; return projects().find(p => norm(p.nome) === norm(name)) || projects().find(p => similar(p.nome, name)) || null; }
+
+/* Métricas e alertas de um projeto */
+function projectMetrics(p, list) {
+  const tl = projectTimeline(p, list), { ms, maps, snaps } = tl;
+  const last = snaps.length ? snaps[snaps.length - 1] : null;
+  const lastWith = key => [...snaps].reverse().find(s => s[key] != null);
+  const rag = lastWith('rag'), ragPmo = rag?.pmo?.estado;
+  const marcos = [...maps.marcos.values()].map(x => {
+    const dates = x.hist.map(h => h.data_prevista).filter(Boolean);
+    const first = dates[0] || null, lastD = dates[dates.length - 1] || null;
+    let replans = 0; for (let i = 1; i < dates.length; i++) if (dates[i] !== dates[i - 1]) replans++;
+    const slip = first && lastD ? Math.round((toDate(lastD) - toDate(first)) / 864e5) : 0;
+    const recentSlip = x.hist.length >= 2 && x.hist[x.hist.length - 1].data_prevista && x.hist[x.hist.length - 2].data_prevista && x.hist[x.hist.length - 1].data_prevista > x.hist[x.hist.length - 2].data_prevista;
+    return { ...x, primeira: first, atual: lastD, replans, slip, recentSlip, atrasado: !x.concluido && lastD && lastD < TODAY };
+  }).sort((a, b) => (a.atual || '9999').localeCompare(b.atual || '9999'));
+  const back = [...maps.backlog.values()];
+  const open = back.filter(b => !DELIVERED.includes(b.estado) && b.estado !== 'recusado');
+  const vNum = v => +(String(v || '').match(/\d+/) || [0])[0];
+  const pushed = back.filter(b => { const vs = b.hist.map(h => vNum(h.versao)).filter(Boolean); return vs.length > 1 && vs[vs.length - 1] > vs[0]; });
+  const reopened = back.filter(b => { let was = false; for (const h of b.hist) { if (DELIVERED.includes(h.estado)) was = true; else if (was && h.estado !== 'recusado') return true; } return false; });
+  const chronic = open.filter(b => b.mentions >= 3);
+  const riscos = [...maps.riscos.values()], riscosAbertos = riscos.filter(r => ['aberto', 'materializado'].includes(r.estado));
+  const decisoes = [...maps.decisoes_pendentes.values()].filter(d => d.estado === 'pendente').map(d => ({ ...d, idade: ms.filter(m => (m.date || '') >= (d.first || '')).length }));
+  const todos = ms.flatMap(m => m.todos);
+  const due = todos.filter(t => t.due && t.due <= TODAY);
+  const sayDo = due.length ? Math.round(100 * due.filter(t => isDone(t)).length / due.length) : null;
+  const overdue = todos.filter(t => !isDone(t) && t.due && t.due < TODAY);
+  const idx = new Map(ms.map((m, i) => [m.id, i]));
+  const zombies = todos.filter(t => !isDone(t) && (ms.length - 1 - (idx.get(t.m.id) ?? ms.length)) >= 3);
+  const durTotal = ms.reduce((s, m) => s + (m.dur || 0), 0);
+  const gaps = ms.slice(1).map((m, i) => (toDate(m.date) - toDate(ms[i].date)) / 864e5).filter(x => x >= 0);
+  const cadence = gaps.length ? gaps.reduce((a, b) => a + b, 0) / gaps.length : null;
+  const delivered = back.filter(b => DELIVERED.includes(b.estado)).length;
+  const sat = snaps.filter(s => s.satisfacao != null), ado = snaps.filter(s => s.adocao != null);
+  const satTrend = sat.length >= 2 ? sat[sat.length - 1].satisfacao - sat[Math.max(0, sat.length - 3)].satisfacao : 0;
+  // Confiança: linguagem hesitante das pessoas que reportam (exceto tu)
+  const speakers = new Map();
+  ms.forEach(m => (m.data?.oradores || []).forEach(o => { if (isMe(o.nome) || o.eu) return; const k = [...speakers.keys()].find(x => samePerson(x, o.nome)) || o.nome; const s = speakers.get(k) || { nome: k, pts: [] }; s.pts.push({ date: m.date, v: o.hesitacoes_100, title: m.title, pct: o.pct }); speakers.set(k, s); }));
+  const confianca = [...speakers.values()].filter(s => s.pts.length >= 3 && s.pts.some(x => x.v > 0)).sort((a, b) => b.pts.length - a.pts.length).slice(0, 2);
+  // Alertas
+  const alerts = [];
+  const slipping = marcos.filter(x => x.recentSlip && !x.concluido);
+  if (ragPmo?.rag === 'verde' && (slipping.length || overdue.length >= 2 || riscosAbertos.some(r => r.gravidade === 'alta')))
+    alerts.push({ s: 'bad', t: 'Verde por fora, vermelho por dentro', d: `O estado reportado é verde, mas ${LF.format([slipping.length ? plural(slipping.length, 'marco escorregou', 'marcos escorregaram') + ' na última reunião' : '', overdue.length >= 2 ? plural(overdue.length, 'ação está em atraso', 'ações estão em atraso') : '', riscosAbertos.some(r => r.gravidade === 'alta') ? 'há riscos altos em aberto' : ''].filter(Boolean))}.` });
+  const greenSlips = snaps.filter(sn => sn.rag === 'verde' && sn.pmo && sn.pmo.marcos.some(mk => { const e = maps.marcos.get(mk.codigo); if (!e || !mk.data_prevista) return false; const i = e.hist.findIndex(h => h.id === sn.m.id); return i > 0 && e.hist[i - 1].data_prevista && mk.data_prevista > e.hist[i - 1].data_prevista; }));
+  if (greenSlips.length && !(ragPmo?.rag === 'verde' && slipping.length)) alerts.push({ s: 'warn', t: 'Verde enquanto escorregava', d: `Em ${plural(greenSlips.length, 'reunião', 'reuniões')} (${LF.format(greenSlips.map(sn => fmtDate(sn.date, 'short')))}) o estado foi dado como verde no mesmo dia em que um marco mudou de data.` });
+  marcos.filter(x => !x.concluido && x.replans >= 2).forEach(x => alerts.push({ s: 'bad', t: `“${x.nome}” já mudou de data ${x.replans} vezes`, d: `Deriva acumulada de ${plural(x.slip, 'dia', 'dias')}: de ${fmtDate(x.primeira, 'short')} para ${fmtDate(x.atual, 'short')}.` }));
+  marcos.filter(x => x.atrasado).forEach(x => alerts.push({ s: 'bad', t: `“${x.nome}” passou a data prevista`, d: `Previsto para ${fmtDate(x.atual, 'short')} e ainda não concluído.` }));
+  if (chronic.length) alerts.push({ s: 'warn', t: plural(chronic.length, 'dor crónica', 'dores crónicas'), d: `Itens falados em 3 ou mais reuniões sem serem resolvidos: ${LF.format(chronic.slice(0, 3).map(b => `“${b.titulo}”`))}.` });
+  if (reopened.length) alerts.push({ s: 'warn', t: plural(reopened.length, 'item reaberto', 'itens reabertos'), d: `Dados como entregues e depois voltaram a ser problema: ${LF.format(reopened.slice(0, 3).map(b => `“${b.titulo}”`))}.` });
+  decisoes.filter(d => d.idade >= 3).forEach(d => alerts.push({ s: 'warn', t: 'Decisão arrastada', d: `“${d.titulo}” está por decidir há ${plural(d.idade, 'reunião', 'reuniões')}.` }));
+  const repeated = []; todos.forEach(t => { const g = repeated.find(x => similar(x.text, t.text)); if (g) g.n++; else repeated.push({ text: t.text, n: 1, open: !isDone(t) }); });
+  repeated.filter(r => r.n >= 3).forEach(r => alerts.push({ s: 'warn', t: `Ação pedida ${r.n} vezes`, d: `“${r.text}” foi combinada em ${r.n} reuniões diferentes. Ou falta dono, ou falta prazo, ou falta vontade.` }));
+  if (zombies.length) alerts.push({ s: 'warn', t: plural(zombies.length, 'ação zombie', 'ações zombie'), d: 'Abertas há 3 ou mais reuniões sem fecho.' });
+  if (sat.length >= 2 && satTrend <= -2) alerts.push({ s: 'bad', t: 'Satisfação a cair', d: `De ${sat[Math.max(0, sat.length - 3)].satisfacao} para ${sat[sat.length - 1].satisfacao} (escala de −2 a +2).` });
+  else if (sat.length >= 2 && satTrend < 0) alerts.push({ s: 'warn', t: 'Satisfação a descer', d: 'A satisfação do interlocutor desceu nas últimas reuniões.' });
+  if (pushed.length >= 2) alerts.push({ s: 'warn', t: 'Âmbito a fugir para a frente', d: `${plural(pushed.length, 'item foi empurrado', 'itens foram empurrados')} para uma versão posterior.` });
+  const growth = snaps.length >= 3 ? snaps.slice(-3).reduce((s, x) => s + x.novos, 0) : 0, deliveredRecent = snaps.length >= 4 ? snaps[snaps.length - 1].entregues - snaps[snaps.length - 4].entregues : null;
+  if (deliveredRecent !== null && growth > deliveredRecent + 1) alerts.push({ s: 'warn', t: 'O backlog cresce mais depressa do que se entrega', d: `${plural(growth, 'pedido novo', 'pedidos novos')} e ${plural(deliveredRecent, 'entrega', 'entregas')} nas últimas 3 reuniões.` });
+  confianca.forEach(c => { const l = c.pts.slice(-2); if (l.length === 2 && l[1].v >= 3 && l[1].v > l[0].v) alerts.push({ s: 'warn', t: `Linguagem hesitante de ${firstName(c.nome)}`, d: `${nf(l[1].v, 1)} hesitações por 100 palavras na última reunião (antes ${nf(l[0].v, 1)}). Costuma antecipar atrasos.` }); });
+  const health = !ms.length ? null : alerts.some(a => a.s === 'bad') ? 'bad' : alerts.length ? 'warn' : 'ok';
+  const perguntas = [...(last?.pmo?.perguntas_pmo || [])];
+  return { tl, ms, snaps, last, rag: ragPmo, marcos, back, open, pushed, reopened, chronic, riscos, riscosAbertos, decisoes, todos, sayDo, overdue, zombies, durTotal, cadence, delivered, sat, ado, confianca, alerts, health, perguntas, temPmo: snaps.some(s => s.pmo) };
+}
+
+/* Sugestões de projetos: pessoas ou temas recorrentes fora de projetos */
+function projectSuggestions() {
+  const free = meetings.filter(m => !m.exemplo && !m.rec.projeto);
+  const people = new Map(), tags = new Map();
+  free.forEach(m => { m.people.filter(p => !isMe(p)).forEach(p => { const k = [...people.keys()].find(x => samePerson(x, p)) || p; people.set(k, (people.get(k) || 0) + 1); }); m.tags.forEach(t => tags.set(norm(t), [(tags.get(norm(t))?.[0] || t), (tags.get(norm(t))?.[1] || 0) + 1])); });
+  const taken = projects().flatMap(p => [...(p.pessoas || []), ...(p.palavras || []), p.nome]);
+  const out = [];
+  [...tags.values()].filter(([t, n]) => n >= 3 && !taken.some(x => similar(x, t))).sort((a, b) => b[1] - a[1]).slice(0, 2).forEach(([t, n]) => out.push({ nome: cap(t), palavras: [t], pessoas: [], n, motivo: `${plural(n, 'reunião', 'reuniões')} com o tema “${t}”` }));
+  [...people.entries()].filter(([p, n]) => n >= 3 && !taken.some(x => samePerson(x, p))).sort((a, b) => b[1] - a[1]).slice(0, 2).forEach(([p, n]) => out.push({ nome: `Reuniões com ${displayName(p)}`, palavras: [], pessoas: [p], n, motivo: `${plural(n, 'reunião', 'reuniões')} com ${displayName(p)}` }));
+  return out.slice(0, 3);
+}
+function candidateMeetings(p) {
+  return meetings.filter(m => !m.exemplo).map(m => {
+    let score = 0;
+    if ((p.palavras || []).some(k => k && m.search.includes(norm(k)))) score += 2;
+    if (norm(m.title).includes(norm(p.nome))) score += 2;
+    if ((p.pessoas || []).some(x => m.people.some(y => samePerson(x, y)))) score += 1;
+    return { m, score };
+  }).filter(o => o.score > 0 || o.m.rec.projeto === p.id).sort((a, b) => (b.m.date || '').localeCompare(a.m.date || ''));
+}
+
+/* Bloco do pedido com os projetos acompanhados e o estado atual de cada um */
+function projectsPromptBlock(maxDate) {
+  const ps = projects(); if (!ps.length) return '';
+  const lines = ps.map(p => {
+    const tl = projectTimeline(p, meetings.filter(m => !maxDate || (m.date || '') <= maxDate));
+    const it = (kind, f) => [...tl.maps[kind].values()].filter(f).slice(0, 25);
+    const marcos = it('marcos', x => !x.concluido).map(x => `${x.codigo} ${x.nome}${x.data_prevista ? ` (previsto ${x.data_prevista})` : ''}`);
+    const back = it('backlog', b => !DELIVERED.includes(b.estado) && b.estado !== 'recusado').map(b => `${b.codigo} ${b.titulo} [${[b.tipo, b.versao, b.prioridade, b.estado].filter(Boolean).join(', ')}]`);
+    const ent = it('backlog', b => DELIVERED.includes(b.estado)).slice(-10).map(b => `${b.codigo} ${b.titulo}`);
+    const ris = it('riscos', r => ['aberto', 'materializado'].includes(r.estado)).map(r => `${r.codigo} ${r.titulo} [${r.gravidade}]`);
+    const dec = it('decisoes_pendentes', d => d.estado === 'pendente').map(d => `${d.codigo} ${d.titulo}`);
+    return `- "${p.nome}": ${p.descricao || 'sem descrição'}${p.palavras?.length ? ` Palavras-chave: ${p.palavras.join(', ')}.` : ''}${p.pessoas?.length ? ` Pessoas: ${p.pessoas.join(', ')}.` : ''}
+  Marcos em aberto: ${marcos.join('; ') || '(nenhum)'}
+  Backlog em aberto: ${back.join('; ') || '(nenhum)'}
+  Já entregue: ${ent.join('; ') || '(nada)'}
+  Riscos abertos: ${ris.join('; ') || '(nenhum)'}
+  Decisões pendentes: ${dec.join('; ') || '(nenhuma)'}`;
+  }).join('\n');
+  return `
+PROJETOS EM ACOMPANHAMENTO (o dono do caderno acompanha-os como PMO):
+${lines}
+Se esta reunião for sobre um destes projetos, preenche "pmo" (senão "pmo": null).
+REGRAS PMO: sê um PMO crítico e factual. Reutiliza SEMPRE os códigos acima quando falares de um item que já existe; itens novos levam "codigo": null. Inclui só os itens falados nesta reunião. Um marco com nova data leva a nova "data_prevista". O estado (verde/amarelo/vermelho) só é "explicito": true se alguém o disse; senão infere-o e põe "explicito": false. Em "satisfacao" avalia o interlocutor principal (de −2 muito insatisfeito a +2 muito satisfeito) com uma citação. Em "perguntas_pmo" escreve 2 a 4 perguntas incómodas que um PMO devia fazer na próxima reunião.
+`;
+}
+const PMO_SCHEMA = `"pmo": {
+    "projeto": "nome exato do projeto, ou null",
+    "estado": {"rag": "verde | amarelo | vermelho", "razao": "porquê, numa frase", "explicito": false},
+    "marcos": [{"codigo": "M1 ou null", "nome": "...", "data_prevista": "AAAA-MM-DD", "concluido": false, "nota": "..."}],
+    "backlog": [{"codigo": "B1 ou null", "titulo": "...", "tipo": "pedido | melhoria | bug | dor", "versao": "V1 | V2 | V3", "prioridade": "must-have | sonho | normal", "estado": "novo | analise | desenvolvimento | entregue | validado | recusado", "nota": "..."}],
+    "riscos": [{"codigo": "R1 ou null", "titulo": "...", "gravidade": "alta | media | baixa", "estado": "aberto | mitigado | fechado | materializado", "responsavel": "...", "mitigacao": "..."}],
+    "decisoes_pendentes": [{"codigo": "D1 ou null", "titulo": "...", "estado": "pendente | decidida", "decisao": "o que se decidiu, se decidida"}],
+    "satisfacao": {"nota": 0, "evidencia": "citação"},
+    "adocao": {"percentagem": 50, "ainda_manual": ["o que ainda se faz à mão"]},
+    "perguntas_pmo": ["..."]
+  }`;
+
+/* Reconstruir o histórico de um projeto a partir das atas já guardadas */
+function buildHistoryPrompt(p, respostaPara) {
+  const ms = meetingsOf(p);
+  const blocks = ms.map(m => {
+    const c = m.c;
+    const secs = (c.seccoes || []).map(s => `${s.titulo}: ${s.tipo === 'texto' ? s.texto : s.tipo === 'tabela' ? s.linhas.map(r => r.join(' / ')).join('; ') : (s.itens || []).map(i => typeof i === 'string' ? i : `${i.quem ? i.quem + ': ' : ''}${i.texto}`).join('; ')}`).join('\n');
+    return `### Reunião id="${m.id}" — ${m.date}, ${m.title}${m.dur ? `, ${fmtDur(m.dur)}` : ''}
+Participantes: ${m.people.join(', ')}
+Resumo: ${c.resumo || ''}
+${c.contexto ? 'Contexto: ' + c.contexto + '\n' : ''}${(c.temas || []).length ? 'Temas: ' + c.temas.map(t => `${t.titulo} (${t.resumo})`).join('; ') + '\n' : ''}${secs}
+Tarefas: ${m.todos.map(t => `${t.text} (${t.owner || '?'}${t.due ? ', ' + t.due : ''})`).join('; ') || '(nenhuma)'}${m.rec.ficheiro && dirHandle ? `\nTranscrição original (se precisares de pormenor): entrada/processadas/${m.rec.ficheiro}` : ''}`;
+  }).join('\n\n');
+  return `És um PMO crítico e experiente da equipa ${TEAM()} (Natixis). Reconstrói a evolução do projeto "${p.nome}" ao longo das reuniões abaixo (ordem cronológica) e responde APENAS com um objeto JSON válido: sem texto antes ou depois, sem blocos de código. Português europeu.
+${respostaPara ? `\nONDE RESPONDER: escreve a resposta (só o objeto JSON) no ficheiro ${respostaPara}. Não alteres nenhum outro ficheiro.\n` : ''}
+PROJETO: ${p.nome}. ${p.descricao || ''}${p.palavras?.length ? ` Palavras-chave: ${p.palavras.join(', ')}.` : ''}${p.pessoas?.length ? ` Pessoas: ${p.pessoas.join(', ')}.` : ''}
+DONO DO CADERNO: ${OWNER() || 'não indicado'}.
+
+O QUE FAZER
+- Para cada reunião, o bloco "pmo" com o que mudou NESSA reunião: marcos (e a data prevista nessa altura), itens de backlog (pedidos, melhorias, bugs, dores), riscos, decisões pendentes, satisfação do interlocutor principal, adoção (percentagem do processo já feita com a solução nova, se se souber) e perguntas que um PMO devia ter feito a seguir.
+- Dá códigos estáveis e reutiliza-os entre reuniões: M1, M2… para marcos; B1, B2… backlog; R1… riscos; D1… decisões. O mesmo item tem sempre o mesmo código.
+- Sê factual. O estado verde/amarelo/vermelho só é "explicito": true se foi dito; senão infere-o.
+- Inclui todas as reuniões, mesmo as que não mudaram nada (nesse caso, listas vazias).
+
+FORMATO
+{"projeto": "${p.nome}", "reunioes": [{"id": "id da reunião", ${PMO_SCHEMA.replace('"pmo": ', '"pmo": ')}}]}
+
+REUNIÕES (${ms.length})
+${blocks}`;
+}
+function applyHistory(p, raw) {
+  const o = extractJSON(raw);
+  const list = Array.isArray(o.reunioes) ? o.reunioes : [];
+  if (!list.length) throw new Error('A resposta não tem a lista "reunioes". Pede ao Kilo Code: "Repete só o JSON, completo."');
+  let n = 0;
+  const ms = meetingsOf(p);
+  for (const r of list) {
+    const m = ms.find(x => x.id === r.id) || ms.find(x => r.data && x.date === r.data);
+    if (!m) continue;
+    const pmo = normalizePMO(r.pmo || r); if (!pmo) continue;
+    pmo.projeto = p.nome;
+    m.rec.conteudo.pmo = pmo; m.c.pmo = pmo; n++;
+  }
+  // Códigos que faltem, por ordem cronológica
+  for (const m of ms) if (m.c.pmo) assignCodes(p, m.c.pmo, meetings.filter(x => (x.date || '') < (m.date || '') || x === m).filter(x => x !== m), m.id);
+  return n;
 }
 
 /* ════════════════ Interface: estado ════════════════ */
@@ -633,12 +910,12 @@ function renderBrand() { $('#brand-team').textContent = TEAM(); $('#brand-owner'
 function renderNav() {
   const open = allTodos.filter(t => !isDone(t)), mine = knowsMe() ? open.filter(mineTodo) : open;
   const late = mine.filter(t => t.due && t.due < TODAY).length;
-  const items = [['', 'home', 'Início', ''], ['tarefas', 'tasks', 'Tarefas', mine.length ? `<span class="count ${late ? 'late' : ''}">${nf(mine.length)}<span class="sr-only"> em aberto${late ? `, ${late} em atraso` : ''}</span></span>` : ''], ['pessoas', 'users', 'Pessoas', ''], ['evolucao', 'chart', 'Evolução', ''], ['ajuda', 'help', 'Como usar', ''], ['definicoes', 'gear', 'Definições', '']];
+  const items = [['', 'home', 'Início', ''], ['tarefas', 'tasks', 'Tarefas', mine.length ? `<span class="count ${late ? 'late' : ''}">${nf(mine.length)}<span class="sr-only"> em aberto${late ? `, ${late} em atraso` : ''}</span></span>` : ''], ['projetos', 'folder', 'Projetos', projects().length ? `<span class="count">${nf(projects().length)}</span>` : ''], ['pessoas', 'users', 'Pessoas', ''], ['evolucao', 'chart', 'Evolução', ''], ['ajuda', 'help', 'Como usar', ''], ['definicoes', 'gear', 'Definições', '']];
   $('#nav').innerHTML = items.map(([h, ic, l, extra]) => `<a href="#/${h}" data-view="${h}">${icon(ic)}<span>${l}</span>${extra}</a>`).join('');
   markNav();
 }
 function markNav() {
-  const v = current?.view ?? '';
+  const v = current?.view === 'p' ? 'projetos' : (current?.view ?? '');
   $$('#nav a').forEach(a => a.dataset.view === v ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
   $$('#list .m-item').forEach(a => a.dataset.id === current?.id ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
 }
@@ -723,8 +1000,9 @@ function lineChart(pts, opt = {}) {
   let lo = Math.min(...vals), hi = Math.max(...vals);
   if (opt.band) { if (opt.band[0] != null) lo = Math.min(lo, opt.band[0]); if (opt.band[1] != null) hi = Math.max(hi, opt.band[1]); }
   if (opt.ref != null) { lo = Math.min(lo, opt.ref); hi = Math.max(hi, opt.ref); }
+  if (opt.min != null) lo = opt.min; if (opt.max != null) hi = opt.max;
   if (hi === lo) { hi += 1; lo = Math.max(0, lo - 1); }
-  const span = hi - lo; hi += span * .1; lo = Math.max(0, lo - span * .1);
+  if (opt.min == null && opt.max == null) { const span = hi - lo; hi += span * .1; lo = Math.max(0, lo - span * .1); }
   const x = i => P.l + (pts.length === 1 ? (W - P.l - P.r) / 2 : i * (W - P.l - P.r) / (pts.length - 1));
   const y = v => P.t + (1 - (v - lo) / (hi - lo)) * (H - P.t - P.b);
   const path = pts.map((p, i) => `${i ? 'L' : 'M'}${x(i).toFixed(1)},${y(p.v).toFixed(1)}`).join('');
@@ -752,6 +1030,236 @@ const taskRow = t => {
     <a class="task-from" href="${meetingHref(t.m)}">${esc(t.m.title)}, ${fmtDate(t.m.date, 'short')}</a>${closedNote(t)}
   </div>`;
 };
+
+/* ── Projetos: gráficos ── */
+const RAG_LABEL = { verde: 'Verde', amarelo: 'Amarelo', vermelho: 'Vermelho' }, RAG_STATUS = { verde: 'ok', amarelo: 'warn', vermelho: 'bad' };
+const HEALTH_LABEL = { ok: 'Sob controlo', warn: 'Atenção', bad: 'Crítico' };
+const dnum = iso => toDate(iso).getTime();
+function mtaChart(M) {
+  const series = M.marcos.map((x, i) => ({ x, c: `var(--sp${(i % 6) + 1})`, pts: x.hist.filter(h => h.data_prevista && h.date).map(h => [dnum(h.date), dnum(h.data_prevista), h]) })).filter(s => s.pts.length);
+  if (!series.length) return '<p class="muted">Ainda não há marcos com datas. Aparecem quando se fala de datas de entrega nas reuniões.</p>';
+  const W = 720, H = 300, P = { l: 70, r: 70, t: 14, b: 34 };
+  const xs = M.snaps.map(s => dnum(s.date)), all = series.flatMap(s => s.pts.map(p => p[1]));
+  let x0 = Math.min(...xs), x1 = Math.max(...xs); if (x1 - x0 < 7 * 864e5) { x0 -= 3 * 864e5; x1 += 4 * 864e5; }
+  let y0 = Math.min(...all, x0), y1 = Math.max(...all, x1); const pad = (y1 - y0) * .08 || 864e5 * 3; y0 -= pad; y1 += pad;
+  const X = t => P.l + (t - x0) / (x1 - x0) * (W - P.l - P.r), Y = t => P.t + (1 - (t - y0) / (y1 - y0)) * (H - P.t - P.b);
+  const iso = t => localISO(new Date(t));
+  const yt = Array.from({ length: 5 }, (_, i) => y0 + (y1 - y0) * i / 4), xt = M.snaps.length <= 6 ? M.snaps.map(s => dnum(s.date)) : Array.from({ length: 5 }, (_, i) => x0 + (x1 - x0) * i / 4);
+  const d0 = Math.max(x0, y0), d1 = Math.min(x1, y1);
+  return `<svg class="chart mta" viewBox="0 0 ${W} ${H}" role="img" aria-label="Tendência de marcos: ${esc(series.map(s => `${s.x.nome}, de ${fmtDate(s.x.primeira, 'short')} para ${fmtDate(s.x.atual, 'short')}`).join('; '))}">
+    ${yt.map(t => `<line class="grid-l" x1="${P.l}" x2="${W - P.r}" y1="${Y(t).toFixed(1)}" y2="${Y(t).toFixed(1)}"/><text class="ax" x="${P.l - 8}" y="${Y(t) + 3}" text-anchor="end">${fmtDate(iso(t), 'short')}</text>`).join('')}
+    ${xt.map(t => `<text class="ax" x="${X(t).toFixed(1)}" y="${H - 10}" text-anchor="middle">${fmtDate(iso(t), 'short')}</text>`).join('')}
+    ${d1 > d0 ? `<line class="diag" x1="${X(d0).toFixed(1)}" y1="${Y(d0).toFixed(1)}" x2="${X(d1).toFixed(1)}" y2="${Y(d1).toFixed(1)}"><title>Linha de chegada: quando um marco toca esta linha, a data chegou</title></line>` : ''}
+    ${series.map(s => `<g style="--c:${s.c}"><path class="mta-line" d="${s.pts.map((p, i) => `${i ? 'L' : 'M'}${X(p[0]).toFixed(1)},${Y(p[1]).toFixed(1)}`).join('')}"/>
+      ${s.pts.map(p => `<circle class="mta-dot" cx="${X(p[0]).toFixed(1)}" cy="${Y(p[1]).toFixed(1)}" r="3.5"><title>${esc(s.x.nome)}: na reunião de ${fmtDate(p[2].date, 'short')}, previsto para ${fmtDate(p[2].data_prevista, 'short')}</title></circle>`).join('')}
+      <text class="mta-label" x="${(X(s.pts[s.pts.length - 1][0]) + 8).toFixed(1)}" y="${(Y(s.pts[s.pts.length - 1][1]) + 4).toFixed(1)}">${esc(s.x.codigo)}</text></g>`).join('')}
+  </svg>
+  <div class="legend" style="margin-top:var(--s-2)">${series.map(s => `<span><span class="key" style="--c:${s.c}"></span>${esc(s.x.codigo)} ${esc(s.x.nome)}${s.x.replans ? `, ${plural(s.x.replans, 'mudança', 'mudanças')} de data` : ''}${s.x.concluido ? ', concluído' : ''}</span>`).join('')}</div>`;
+}
+function burnupChart(M) {
+  const S = M.snaps.filter(s => s.pmo); if (!S.length) return '<p class="muted">Sem dados de backlog ainda.</p>';
+  const W = 720, H = 220, P = { l: 36, r: 16, t: 12, b: 30 };
+  const max = Math.max(4, ...S.map(s => s.pedidos)), n = S.length;
+  const X = i => P.l + (n === 1 ? (W - P.l - P.r) / 2 : i * (W - P.l - P.r) / (n - 1)), Y = v => P.t + (1 - v / max) * (H - P.t - P.b);
+  const bw = Math.max(4, Math.min(22, (W - P.l - P.r) / n * .45));
+  const line = k => S.map((s, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(s[k]).toFixed(1)}`).join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Backlog: ${esc(S.map(s => `${fmtDate(s.date, 'short')}: ${s.entregues} entregues de ${s.pedidos}`).join('; '))}">
+    ${[0, .5, 1].map(f => `<line class="grid-l" x1="${P.l}" x2="${W - P.r}" y1="${Y(max * f).toFixed(1)}" y2="${Y(max * f).toFixed(1)}"/><text class="ax" x="${P.l - 6}" y="${Y(max * f) + 3}" text-anchor="end">${nf(max * f)}</text>`).join('')}
+    ${S.map((s, i) => s.novos ? `<rect class="bar-new" x="${(X(i) - bw / 2).toFixed(1)}" y="${Y(s.novos).toFixed(1)}" width="${bw.toFixed(1)}" height="${(H - P.b - Y(s.novos)).toFixed(1)}" rx="2"><title>${fmtDate(s.date, 'short')}: ${plural(s.novos, 'pedido novo', 'pedidos novos')}</title></rect>` : '').join('')}
+    <path class="line-scope" d="${line('pedidos')}"/><path class="line" d="${line('entregues')}"/>
+    ${S.map((s, i) => `<circle cx="${X(i).toFixed(1)}" cy="${Y(s.entregues).toFixed(1)}" r="3"><title>${fmtDate(s.date, 'short')}: ${s.entregues} entregues de ${s.pedidos} pedidos</title></circle>`).join('')}
+    ${S.length <= 8 ? S.map((s, i) => `<text class="ax" x="${X(i).toFixed(1)}" y="${H - 10}" text-anchor="middle">${fmtDate(s.date, 'short')}</text>`).join('') : `<text class="ax" x="${X(0)}" y="${H - 10}">${fmtDate(S[0].date, 'short')}</text><text class="ax" x="${X(n - 1)}" y="${H - 10}" text-anchor="end">${fmtDate(S[n - 1].date, 'short')}</text>`}
+  </svg>
+  <div class="legend" style="margin-top:var(--s-2)"><span><span class="key" style="--c:var(--ink-3)"></span>Pedidos acumulados</span><span><span class="key" style="--c:var(--brand)"></span>Entregues</span><span><span class="key" style="--c:var(--coral)"></span>Pedidos novos na reunião</span></div>`;
+}
+function ragStrip(M) {
+  const S = M.snaps; if (!S.some(s => s.rag)) return '';
+  return `<div class="rag-strip" role="list" aria-label="Estado reunião a reunião">${S.map(s => `<a role="listitem" class="rag-cell ${s.rag ? RAG_STATUS[s.rag] : 'none'}" href="${meetingHref(s.m)}" title="${esc(fmtDate(s.date, 'short'))}: ${esc(s.rag ? RAG_LABEL[s.rag] + (s.pmo?.estado?.explicito ? '' : ' (inferido)') : 'sem estado')}${s.pmo?.estado?.razao ? '. ' + esc(s.pmo.estado.razao) : ''}"><span class="sr-only">${esc(fmtDate(s.date))}: ${s.rag ? RAG_LABEL[s.rag] : 'sem estado'}</span></a>`).join('')}</div>
+    <div class="rag-axis"><span>${fmtDate(S[0].date, 'short')}</span><span>${fmtDate(S[S.length - 1].date, 'short')}</span></div>`;
+}
+
+/* ── Projetos: vistas ── */
+function projectDerivedQuestions(M) {
+  const q = [...M.perguntas];
+  M.marcos.filter(x => !x.concluido && x.replans >= 2).slice(0, 1).forEach(x => q.push(`“${x.nome}” já mudou de data ${x.replans} vezes. O que é diferente desta vez, e o que garante ${fmtDate(x.atual, 'short')}?`));
+  M.decisoes.filter(d => d.idade >= 3).slice(0, 1).forEach(d => q.push(`Quem decide “${d.titulo}”, e até quando? Está pendente há ${plural(d.idade, 'reunião', 'reuniões')}.`));
+  M.chronic.slice(0, 1).forEach(b => q.push(`“${b.titulo}” volta a cada reunião. Entra na versão atual ou fica explicitamente fora?`));
+  if (M.zombies.length) q.push(`Há ${plural(M.zombies.length, 'ação aberta', 'ações abertas')} há 3 ou mais reuniões. Fechamos, reatribuímos ou abandonamos?`);
+  return [...new Set(q)].slice(0, 6);
+}
+function viewProjects() {
+  const ps = projects(), sug = projectSuggestions();
+  return `<div class="page wide">
+    <div class="page-head"><div><h1 tabindex="-1">Projetos</h1><p class="page-sub">A evolução de cada projeto ao longo das reuniões, com o olhar de um PMO crítico.</p></div>
+      <div class="actions"><a class="btn primary btn-lg" href="#/projetos/novo">${icon('plus')}Novo projeto</a></div></div>
+    <div class="stack">
+      ${ps.length ? `<div class="panel" style="padding:0"><div class="tbl-wrap"><table class="tbl">
+        <thead><tr><th scope="col">Projeto</th><th scope="col">Saúde</th><th scope="col">Estado reportado</th><th scope="col" class="n">Reuniões</th><th scope="col" class="n">Última</th><th scope="col">Próximo marco</th><th scope="col" class="n">Alertas</th></tr></thead>
+        <tbody>${ps.map(p => { const M = projectMetrics(p); const nx = M.marcos.find(x => !x.concluido); const last = M.ms[M.ms.length - 1];
+          return `<tr><td><a class="row-title" href="#/p/${encodeURIComponent(p.id)}">${esc(p.nome)}</a></td>
+            <td>${M.health ? `<span class="badge ${M.health}">${HEALTH_LABEL[M.health]}</span>` : '<span class="muted">Sem reuniões</span>'}</td>
+            <td>${M.rag?.rag ? `<span class="badge ${RAG_STATUS[M.rag.rag]}">${RAG_LABEL[M.rag.rag]}${M.rag.explicito ? '' : ' (inferido)'}</span>` : '<span class="muted">—</span>'}</td>
+            <td class="n">${nf(M.ms.length)}</td><td class="n">${last ? fmtDate(last.date, 'short') : '—'}</td>
+            <td>${nx ? `${esc(nx.nome)}, ${fmtDate(nx.atual, 'short')}${nx.slip > 0 ? ` <span class="badge warn">+${nx.slip} d</span>` : ''}` : '<span class="muted">—</span>'}</td>
+            <td class="n">${nf(M.alerts.length)}</td></tr>`; }).join('')}</tbody></table></div></div>`
+        : `<section class="panel" aria-labelledby="pj-empty"><div class="panel-head"><h2 id="pj-empty">Como funciona</h2></div>
+          <ol class="steps-list"><li><b>Declaras um projeto:</b> nome, descrição, palavras-chave e as pessoas com quem o acompanhas.</li>
+            <li><b>Associas as reuniões</b> que já tens (o caderno propõe as que encaixam). As novas são associadas pelo Kilo Code.</li>
+            <li><b>Reconstróis o histórico:</b> o Kilo Code lê as atas antigas e monta a linha do tempo do projeto.</li>
+            <li>A partir daí, cada reunião atualiza marcos, backlog, riscos e decisões, e o caderno mostra a evolução e os alertas.</li></ol>
+          <div class="actions" style="margin-top:var(--s-4)"><a class="btn primary" href="#/projetos/novo">Criar o primeiro projeto</a><a class="btn" href="#/p/exemplo">Ver um projeto de exemplo</a></div></section>`}
+      ${sug.length ? `<section class="panel" aria-labelledby="pj-sug"><div class="panel-head"><h2 id="pj-sug">Isto parece um projeto</h2><p>Reuniões recorrentes que ainda não estão em nenhum projeto</p></div>
+        <div class="rows">${sug.map((s, i) => `<div class="row-link"><div class="row-main"><div class="row-title">${esc(s.nome)}</div><div class="row-sub"><span>${esc(s.motivo)}</span></div></div><a class="btn" href="#/projetos/novo?sug=${i}">Seguir como projeto</a></div>`).join('')}</div></section>` : ''}
+      ${ps.length ? `<p class="field-help"><a class="btn-link" href="#/p/exemplo">Ver um projeto de exemplo</a> para perceber cada gráfico.</p>` : ''}
+    </div></div>`;
+}
+function projectForm(p, sug) {
+  const v = p || sug || { nome: '', descricao: '', palavras: [], pessoas: [] };
+  const freq = new Map(); meetings.filter(m => !m.exemplo).forEach(m => m.people.filter(x => !isMe(x)).forEach(x => freq.set(x, (freq.get(x) || 0) + 1)));
+  const top = [...freq.entries()].sort((a, b) => b[1] - a[1]).slice(0, 8).map(([x]) => x);
+  return `<form data-form="project" data-id="${esc(p?.id || '')}" class="stack" style="gap:var(--s-4)">
+    <div class="form-grid">
+      <div><label class="field-label" for="pj-nome">Nome do projeto</label><input class="text-input" id="pj-nome" name="nome" required value="${esc(v.nome)}" placeholder="Ex.: CodirIT…"></div>
+      <div><label class="field-label" for="pj-pal">Palavras-chave</label><input class="text-input" id="pj-pal" name="palavras" value="${esc((v.palavras || []).join(', '))}" placeholder="Ex.: codir, Microsoft Lists, V2…"><p class="field-help">Separadas por vírgulas. Ajudam a reconhecer as reuniões do projeto.</p></div>
+    </div>
+    <div><label class="field-label" for="pj-desc">Descrição</label><input class="text-input" id="pj-desc" name="descricao" value="${esc(v.descricao || '')}" placeholder="Ex.: Automatizar o CODIR de IT em Microsoft Lists; V2 em entrega, V3 no próximo ano…"><p class="field-help">Uma frase sobre o objetivo e a fase. O Kilo Code usa-a para perceber o contexto.</p></div>
+    <div><label class="field-label" for="pj-pes">Pessoas</label><input class="text-input" id="pj-pes" name="pessoas" value="${esc((v.pessoas || []).join('; '))}" placeholder="Ex.: Dupont, Arnaud…" spellcheck="false"><p class="field-help">Separadas por ponto e vírgula, como aparecem no Teams.${top.length ? ' Frequentes:' : ''}</p>
+      ${top.length ? `<div class="people-pick" style="margin-top:var(--s-2)">${top.map(x => `<button type="button" class="chip" data-add-person="${esc(x)}" translate="no">${esc(displayName(x))}</button>`).join('')}</div>` : ''}</div>
+    <div class="actions"><button class="btn primary" type="submit">${p ? 'Guardar alterações' : 'Criar projeto'}</button><a class="btn" href="${p ? '#/p/' + encodeURIComponent(p.id) : '#/projetos'}">Cancelar</a></div>
+  </form>`;
+}
+function viewProjectNew(sugIdx) {
+  const sug = sugIdx != null ? projectSuggestions()[sugIdx] : null;
+  return `<div class="page"><nav class="crumbs" aria-label="Caminho"><a href="#/projetos">Projetos</a><span aria-hidden="true">/</span><span>Novo</span></nav>
+    <div class="page-head"><div><h1 tabindex="-1">Novo projeto</h1><p class="page-sub">Depois de criares o projeto, o caderno propõe as reuniões que já tens e que encaixam nele.</p></div></div>
+    <section class="panel">${projectForm(null, sug)}</section></div>`;
+}
+function historyPanel(p, M) {
+  const pending = M.ms.filter(m => !m.c.pmo).length;
+  if (!M.ms.length || p.id === 'exemplo') return '';
+  if (!pending && M.temPmo) return '';
+  const folder = dirHandle && dirPerm === 'granted';
+  return `<section class="panel" aria-labelledby="hist-h"><div class="panel-head"><h2 id="hist-h">Reconstruir o histórico</h2><p>${plural(pending, 'reunião sem dados de projeto', 'reuniões sem dados de projeto')}</p></div>
+    <p style="margin:0 0 var(--s-4);color:var(--ink-2);max-width:var(--measure)">O Kilo Code lê as atas destas reuniões, por ordem, e monta a linha do tempo do projeto: marcos e datas, backlog, riscos, decisões e satisfação. Faz-se uma vez; as reuniões novas já chegam com estes dados.</p>
+    ${folder ? `<div class="actions"><button class="btn primary" type="button" data-action="history-folder" data-project="${esc(p.id)}">Pedir ao Kilo Code</button><span class="field-help">Depois faz duplo clique em <b>Atualizar caderno.bat</b> (ou “atualiza o caderno” no Kilo Code).</span></div>` : ''}
+    <details style="margin-top:var(--s-4)" ${folder ? '' : 'open'}><summary class="btn-link" style="cursor:pointer">${folder ? 'Prefiro copiar e colar' : 'Copiar o pedido e colar a resposta'}</summary>
+      <div class="actions" style="margin-top:var(--s-3)"><button class="btn" type="button" data-action="history-copy" data-project="${esc(p.id)}">${icon('copy')}Copiar pedido</button></div>
+      <label class="sr-only" for="hist-answer">Resposta do Kilo Code</label>
+      <textarea class="text-area" id="hist-answer" placeholder="Cola aqui a resposta do Kilo Code, começa por {…" style="margin-top:var(--s-3)"></textarea>
+      <div class="actions" style="margin-top:var(--s-3)"><button class="btn primary" type="button" data-action="history-apply" data-project="${esc(p.id)}">Aplicar ao projeto</button></div></details>
+  </section>`;
+}
+function assignPanel(p) {
+  if (p.id === 'exemplo') return '';
+  const cands = candidateMeetings(p);
+  const assigned = new Set(meetings.filter(m => m.rec.projeto === p.id).map(m => m.id));
+  return `<details class="panel" ${assigned.size ? '' : 'open'}><summary class="panel-head" style="cursor:pointer;margin:0"><h2>Reuniões do projeto</h2><p>${plural(assigned.size, 'associada', 'associadas')}</p></summary>
+    <form data-form="assign" data-id="${esc(p.id)}" style="margin-top:var(--s-4)">
+      ${cands.length ? `<p class="field-help" style="margin:0 0 var(--s-3)">Propostas pelas palavras-chave e pelas pessoas do projeto. Confirma as que pertencem.</p>
+      <div class="rows">${cands.map(({ m, score }) => `<label class="row-link" style="cursor:pointer"><input type="checkbox" name="m" value="${esc(m.id)}" ${assigned.has(m.id) || (!assigned.size && score >= 2) ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--brand)"><div class="row-main"><div class="row-title">${esc(m.title)}</div><div class="row-sub"><span>${fmtDate(m.date, 'short')}</span><span>${esc(LF.format(m.people.slice(0, 3).map(personLabel)))}</span>${m.rec.projeto && m.rec.projeto !== p.id ? `<span>noutro projeto</span>` : ''}</div></div></label>`).join('')}</div>
+      <div class="actions" style="margin-top:var(--s-4)"><button class="btn primary" type="submit">Guardar associação</button></div>`
+      : '<p class="muted" style="margin:0">Ainda não encontrei reuniões que encaixem. Ajusta as palavras-chave ou as pessoas, ou associa uma reunião na página dela.</p>'}
+    </form></details>`;
+}
+function viewProject(id) {
+  const p = projectById(id); if (!p) return `<div class="page"><h1 tabindex="-1">Projeto não encontrado</h1><p><a class="btn-link" href="#/projetos">Voltar aos projetos</a></p></div>`;
+  const M = projectMetrics(p), demo = p.id === 'exemplo';
+  const nx = M.marcos.find(x => !x.concluido) || null;
+  const qs = projectDerivedQuestions(M);
+  const satLast = M.sat[M.sat.length - 1], adoLast = M.ado[M.ado.length - 1];
+  const satLabel = v => v == null ? '—' : ['Muito insatisfeito', 'Insatisfeito', 'Neutro', 'Satisfeito', 'Muito satisfeito'][Math.round(v) + 2];
+  const lastManual = [...M.snaps].reverse().find(s => s.pmo?.adocao?.ainda_manual?.length)?.pmo.adocao.ainda_manual || [];
+  const lastSatEv = [...M.snaps].reverse().find(s => s.pmo?.satisfacao?.evidencia)?.pmo.satisfacao.evidencia;
+  const hoursPerItem = M.delivered ? M.durTotal / 3600 / M.delivered : null;
+  return `<div class="page wide">
+    <nav class="crumbs" aria-label="Caminho"><a href="#/projetos">Projetos</a><span aria-hidden="true">/</span><span>${esc(p.nome)}</span>${demo ? '<span class="badge">Exemplo</span>' : ''}</nav>
+    <div class="page-head" style="margin-bottom:var(--s-6)"><div><h1 tabindex="-1">${esc(p.nome)}</h1>${p.descricao ? `<p class="page-sub">${esc(p.descricao)}</p>` : ''}</div>
+      <div class="actions r-actions"><button class="btn" type="button" data-action="project-report" data-project="${esc(p.id)}">${icon('copy')}Copiar relatório</button><button class="icon-btn" type="button" data-action="print" aria-label="Imprimir ou guardar em PDF" title="Imprimir ou guardar em PDF">${icon('printer')}</button></div></div>
+    <div class="stack">
+      ${!M.ms.length ? assignPanel(p) : ''}
+      ${historyPanel(p, M)}
+      ${M.ms.length ? `
+      <div class="stats">
+        <div class="stat"><div class="stat-v">${M.health ? HEALTH_LABEL[M.health] : '—'}</div><div class="stat-l">Saúde segundo o PMO</div><div class="stat-h">${plural(M.alerts.length, 'alerta', 'alertas')}${M.rag?.rag ? `; reportado ${RAG_LABEL[M.rag.rag].toLowerCase()}${M.rag.explicito ? '' : ' (inferido)'}` : ''}</div></div>
+        <div class="stat"><div class="stat-v">${nx ? fmtDate(nx.atual, 'short') : '—'}</div><div class="stat-l">${nx ? esc(nx.nome) : 'Próximo marco'}</div><div class="stat-h">${nx ? (nx.slip > 0 ? `+${plural(nx.slip, 'dia', 'dias')} desde a 1.ª data; ${plural(nx.replans, 'mudança', 'mudanças')}` : 'Sem deriva') : 'Sem marcos em aberto'}</div></div>
+        <div class="stat"><div class="stat-v">${nf(M.delivered)} de ${nf(M.back.length)}</div><div class="stat-l">Backlog entregue</div><div class="stat-h">${plural(M.open.length, 'item em aberto', 'itens em aberto')}${M.pushed.length ? `; ${plural(M.pushed.length, 'adiado', 'adiados')}` : ''}</div></div>
+        <div class="stat"><div class="stat-v">${M.sayDo == null ? '—' : M.sayDo + '%'}</div><div class="stat-l">Diz-faz</div><div class="stat-h">Ações cumpridas no prazo${M.overdue.length ? `; ${M.overdue.length} em atraso` : ''}</div></div>
+        <div class="stat"><div class="stat-v">${satLast ? (satLast.satisfacao > 0 ? '+' : '') + nf(satLast.satisfacao) : '—'}</div><div class="stat-l">Satisfação do interlocutor</div><div class="stat-h">${satLabel(satLast?.satisfacao)}</div></div>
+        ${adoLast ? `<div class="stat"><div class="stat-v">${nf(adoLast.adocao)}%</div><div class="stat-l">Adoção</div><div class="stat-h">Do processo já na solução nova</div></div>` : ''}
+      </div>
+      ${M.alerts.length ? `<section class="panel" aria-labelledby="al-h"><div class="panel-head"><h2 id="al-h">Alertas do PMO</h2><p>O que merece atenção agora</p></div>
+        ${M.alerts.map(a => `<div class="status-line ${a.s}" style="margin-top:0;margin-bottom:var(--s-2)">${icon('alert')}<p><b>${esc(a.t)}.</b> ${esc(a.d)}</p></div>`).join('')}</section>` : (M.temPmo ? `<div class="status-line ok" style="margin:0">${icon('check')}<p>Sem alertas: os marcos estão estáveis, as ações em dia e nada se arrasta.</p></div>` : '')}
+      ${qs.length ? `<section class="panel" aria-labelledby="pq-h"><div class="panel-head"><h2 id="pq-h">Perguntas para a próxima reunião</h2><p>Para levar e fazer, mesmo que incomodem</p></div><ol class="steps-list">${qs.map(q => `<li>${esc(curly(q))}</li>`).join('')}</ol></section>` : ''}
+      <section class="panel" aria-labelledby="mta-h"><div class="panel-head"><h2 id="mta-h">Tendência dos marcos</h2><p>Cada linha é a data prevista de um marco, reunião a reunião. Plana: controlado. A subir: a escorregar.</p></div>${mtaChart(M)}</section>
+      ${M.snaps.some(s => s.rag) ? `<section class="panel" aria-labelledby="rag-h"><div class="panel-head"><h2 id="rag-h">Estado reunião a reunião</h2><p>Verde, amarelo ou vermelho, como foi dito ou inferido</p></div>${ragStrip(M)}</section>` : ''}
+      <section class="panel" aria-labelledby="bu-h"><div class="panel-head"><h2 id="bu-h">Backlog: pedidos e entregas</h2><p>Se a linha cinzenta sobe mais depressa do que a violeta, o projeto não converge</p></div>${burnupChart(M)}</section>
+      <div class="cols-2">
+        <section class="panel" aria-labelledby="ri-h"><div class="panel-head"><h2 id="ri-h">Riscos em aberto</h2><p>${plural(M.riscosAbertos.length, 'risco', 'riscos')}</p></div>
+          ${M.riscosAbertos.length ? `<div class="rows">${M.riscosAbertos.sort((a, b) => ['alta', 'media', 'baixa'].indexOf(a.gravidade) - ['alta', 'media', 'baixa'].indexOf(b.gravidade)).map(r => `<div class="row-link"><div class="row-main"><div class="row-title">${esc(r.codigo)} ${esc(r.titulo)}</div><div class="row-sub"><span>${r.responsavel ? esc(personLabel(r.responsavel)) : 'Sem responsável'}</span><span>${r.mitigacao ? esc(r.mitigacao) : 'Sem mitigação'}</span></div></div><span class="badge ${r.gravidade === 'alta' ? 'bad' : r.gravidade === 'media' ? 'warn' : ''}">${r.gravidade === 'media' ? 'Média' : cap(r.gravidade)}</span></div>`).join('')}</div>` : '<p class="muted" style="margin:0">Nenhum risco em aberto.</p>'}</section>
+        <section class="panel" aria-labelledby="de-h"><div class="panel-head"><h2 id="de-h">Decisões por tomar</h2><p>Há quantas reuniões se arrastam</p></div>
+          ${M.decisoes.length ? `<div class="rows">${M.decisoes.sort((a, b) => b.idade - a.idade).map(d => `<div class="row-link"><div class="row-main"><div class="row-title">${esc(d.codigo)} ${esc(d.titulo)}</div><div class="row-sub"><span>Desde ${fmtDate(d.first, 'short')}</span></div></div><span class="badge ${d.idade >= 3 ? 'warn' : ''}">${plural(d.idade, 'reunião', 'reuniões')}</span></div>`).join('')}</div>` : '<p class="muted" style="margin:0">Nada por decidir.</p>'}</section>
+      </div>
+      <section class="panel" aria-labelledby="bk-h"><div class="panel-head"><h2 id="bk-h">Backlog</h2><p>Por número de vezes que foi falado</p></div>
+        ${M.back.length ? `<div class="tbl-wrap"><table class="tbl"><thead><tr><th scope="col">Item</th><th scope="col">Tipo</th><th scope="col">Versão</th><th scope="col">Prioridade</th><th scope="col">Estado</th><th scope="col" class="n">Falado</th><th scope="col" class="n">Desde</th></tr></thead>
+          <tbody>${M.back.slice().sort((a, b) => (DELIVERED.includes(a.estado) - DELIVERED.includes(b.estado)) || b.mentions - a.mentions).map(b => `<tr><td style="white-space:normal;min-width:220px">${esc(b.codigo)} ${esc(b.titulo)}${M.reopened.includes(b) ? ' <span class="badge warn">reaberto</span>' : ''}${M.pushed.includes(b) ? ' <span class="badge">adiado</span>' : ''}</td><td>${esc(cap(b.tipo || ''))}</td><td>${esc(b.versao || '—')}</td><td>${b.prioridade === 'must-have' ? 'Must-have' : b.prioridade === 'sonho' ? 'Sonho' : 'Normal'}</td><td><span class="badge ${DELIVERED.includes(b.estado) ? 'ok' : b.estado === 'recusado' ? '' : b.mentions >= 3 ? 'warn' : ''}">${esc({ novo: 'Novo', analise: 'Em análise', desenvolvimento: 'Em desenvolvimento', entregue: 'Entregue', validado: 'Validado', recusado: 'Recusado' }[b.estado] || b.estado)}</span></td><td class="n">${nf(b.mentions)}×</td><td class="n">${fmtDate(b.first, 'short')}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted" style="margin:0">Sem itens de backlog ainda.</p>'}</section>
+      <div class="cols-2">
+        <section class="panel" aria-labelledby="sat-h"><div class="panel-head"><h2 id="sat-h">Satisfação do interlocutor</h2><p>De −2 a +2</p></div>
+          ${M.sat.length ? lineChart(M.sat.map(s => ({ v: s.satisfacao, date: s.date, title: s.m.title })), { min: -2, max: 2, ref: 0, fmt: v => (v > 0 ? '+' : '') + nf(v), label: 'Satisfação' }) : '<p class="muted" style="margin:0">Sem dados ainda.</p>'}
+          ${lastSatEv ? `<blockquote class="quote">${esc(curly('"' + lastSatEv.replace(/^["“]|["”]$/g, '') + '"'))}</blockquote>` : ''}</section>
+        <section class="panel" aria-labelledby="ad-h"><div class="panel-head"><h2 id="ad-h">Adoção</h2><p>Percentagem do processo já na solução nova</p></div>
+          ${M.ado.length ? lineChart(M.ado.map(s => ({ v: s.adocao, date: s.date, title: s.m.title })), { min: 0, max: 100, fmt: v => nf(v) + '%', label: 'Adoção' }) : '<p class="muted" style="margin:0">Sem dados ainda.</p>'}
+          ${lastManual.length ? `<p class="field-help" style="margin-top:var(--s-3)">Ainda à mão: ${esc(LF.format(lastManual))}.</p>` : ''}</section>
+      </div>
+      <div class="cols-2">
+        <section class="panel" aria-labelledby="ex-h"><div class="panel-head"><h2 id="ex-h">Execução</h2><p>Ações combinadas nas reuniões do projeto</p></div>
+          <ul class="verdicts" style="margin-bottom:var(--s-4)"><li><span>Diz-faz (cumpridas no prazo)</span><b class="tabular">${M.sayDo == null ? '—' : M.sayDo + '%'}</b></li><li><span>Em atraso</span><b class="tabular">${nf(M.overdue.length)}</b></li><li><span>Zombie (3 ou mais reuniões)</span><b class="tabular">${nf(M.zombies.length)}</b></li></ul>
+          ${(() => { const groups = []; [...new Set([...M.overdue, ...M.zombies])].sort((a, b) => (b.m.date || '').localeCompare(a.m.date || '')).forEach(t => { const g = groups.find(x => similar(x.t.text, t.text)); if (g) g.n++; else groups.push({ t, n: 1 }); });
+            return groups.slice(0, 6).map(g => g.n > 1 ? taskRow(g.t).replace('<span class="task-side">', `<span class="task-side"><span class="badge warn">pedida ${g.n}×</span>`) : taskRow(g.t)).join(''); })()}</section>
+        <section class="panel" aria-labelledby="cv-h"><div class="panel-head"><h2 id="cv-h">Esforço e conversa</h2><p>O que as reuniões custam e como se fala</p></div>
+          <ul class="verdicts"><li><span>Reuniões</span><b class="tabular">${nf(M.ms.length)}</b></li><li><span>Tempo total em reunião</span><b class="tabular">${fmtDur(M.durTotal)}</b></li>
+            <li><span>Uma reunião a cada</span><b class="tabular">${M.cadence == null ? '—' : plural(Math.round(M.cadence * 10) / 10, 'dia', 'dias')}</b></li>
+            <li><span>Reunião por item entregue</span><b class="tabular">${hoursPerItem == null ? '—' : fmtDur(hoursPerItem * 3600)}</b></li></ul>
+          ${M.confianca.map(c => `<div style="margin-top:var(--s-4)"><div class="field-label">Hesitações de ${esc(personLabel(c.nome))}</div>${lineChart(c.pts, { band: [0, 1.5], fmt: v => `${nf(v, 1)} por 100 palavras`, label: 'Hesitações de ' + c.nome })}</div>`).join('')}</section>
+      </div>
+      <section class="panel" aria-labelledby="pm-h"><div class="panel-head"><h2 id="pm-h">Reuniões do projeto</h2><p>${plural(M.ms.length, 'reunião', 'reuniões')}</p></div>
+        <div class="rows">${M.ms.slice().reverse().map(m => `<a class="row-link" href="${meetingHref(m)}"><div class="row-main"><div class="row-title">${esc(m.title)}</div><div class="row-sub"><span>${fmtDate(m.date, 'short')}</span>${m.dur ? `<span>${fmtDur(m.dur)}</span>` : ''}${m.c.pmo?.estado?.razao ? `<span>${esc(m.c.pmo.estado.razao)}</span>` : ''}</div></div>${m.c.pmo?.estado?.rag ? `<span class="badge ${RAG_STATUS[m.c.pmo.estado.rag]}">${RAG_LABEL[m.c.pmo.estado.rag]}</span>` : ''}</a>`).join('')}</div></section>
+      ${assignPanel(p)}` : ''}
+      ${!demo ? `<details class="panel"><summary class="panel-head" style="cursor:pointer;margin:0"><h2>Editar projeto</h2></summary><div style="margin-top:var(--s-4)">${projectForm(p)}</div>
+        <div class="actions" style="margin-top:var(--s-5)"><button class="btn danger" type="button" data-action="project-delete" data-project="${esc(p.id)}">Apagar o projeto</button><span class="field-help">As reuniões não são apagadas.</span></div></details>` : ''}
+    </div></div>`;
+}
+function projectReportText(p) {
+  const M = projectMetrics(p), L = [];
+  const nx = M.marcos.find(x => !x.concluido);
+  L.push(`${p.nome.toUpperCase()}: PONTO DE SITUAÇÃO`, `${fmtDate(TODAY)}; ${plural(M.ms.length, 'reunião analisada', 'reuniões analisadas')}`);
+  L.push('', `SAÚDE (PMO): ${M.health ? HEALTH_LABEL[M.health] : 'sem dados'}${M.rag?.rag ? `. Estado reportado: ${RAG_LABEL[M.rag.rag]}${M.rag.explicito ? '' : ' (inferido)'}${M.rag.razao ? '. ' + M.rag.razao : ''}` : ''}`);
+  if (M.marcos.length) { L.push('', 'MARCOS'); M.marcos.forEach(x => L.push(`- ${x.nome}: ${x.concluido ? 'concluído' : fmtDate(x.atual)}${x.slip > 0 ? ` (+${plural(x.slip, 'dia', 'dias')}, ${plural(x.replans, 'mudança', 'mudanças')} de data)` : ''}`)); }
+  L.push('', `BACKLOG: ${M.delivered} entregues de ${M.back.length}; ${M.open.length} em aberto${M.pushed.length ? `; ${plural(M.pushed.length, 'adiado', 'adiados')} para versão posterior` : ''}.`);
+  if (M.alerts.length) { L.push('', 'ALERTAS'); M.alerts.forEach(a => L.push(`- ${a.t}. ${a.d}`)); }
+  if (M.riscosAbertos.length) { L.push('', 'RISCOS EM ABERTO'); M.riscosAbertos.forEach(r => L.push(`- ${r.titulo} (${r.gravidade})${r.mitigacao ? '. Mitigação: ' + r.mitigacao : ''}`)); }
+  if (M.decisoes.length) { L.push('', 'DECISÕES POR TOMAR'); M.decisoes.forEach(d => L.push(`- ${d.titulo} (há ${d.idade} reuniões)`)); }
+  const qs = projectDerivedQuestions(M); if (qs.length) { L.push('', 'PRÓXIMAS PERGUNTAS'); qs.forEach(q => L.push(`- ${q}`)); }
+  return L.join('\n');
+}
+function pmoMeetingSection(m) {
+  const pmo = m.c.pmo; if (!pmo) return '';
+  const items = [
+    ...pmo.marcos.map(x => `${x.codigo || ''} ${x.nome}${x.data_prevista ? `: previsto ${fmtDate(x.data_prevista, 'short')}` : ''}${x.concluido ? ' (concluído)' : ''}`),
+    ...pmo.backlog.map(b => `${b.codigo || ''} ${b.titulo}: ${b.estado}${b.versao ? ', ' + b.versao : ''}`),
+    ...pmo.riscos.map(r => `${r.codigo || ''} Risco ${r.titulo}: ${r.estado}, ${r.gravidade}`),
+    ...pmo.decisoes_pendentes.map(d => `${d.codigo || ''} ${d.titulo}: ${d.estado === 'decidida' ? 'decidida' + (d.decisao ? ' (' + d.decisao + ')' : '') : 'por decidir'}`),
+  ];
+  return `<section class="r-sec" aria-labelledby="pmo-h"><h2 id="pmo-h">Acompanhamento do projeto</h2>
+    ${pmo.estado?.rag ? `<p><span class="badge ${RAG_STATUS[pmo.estado.rag]}">${RAG_LABEL[pmo.estado.rag]}${pmo.estado.explicito ? '' : ' (inferido)'}</span> ${esc(pmo.estado.razao || '')}</p>` : ''}
+    ${items.length ? `<ul>${items.map(i => `<li>${esc(i.trim())}</li>`).join('')}</ul>` : ''}
+    ${m.rec.projeto ? `<p><a class="btn-link" href="#/p/${encodeURIComponent(m.rec.projeto)}">Ver a evolução do projeto</a></p>` : ''}</section>`;
+}
+function projectSelect(m) {
+  if (m.exemplo || !projects().length) return '';
+  return `<div class="proj-pick"><label class="field-label" for="proj-sel" style="margin:0">Projeto</label>
+    <select class="text-input" id="proj-sel" data-proj-assign="${esc(m.id)}" style="width:auto;min-height:32px;padding:0 var(--s-2)"><option value="">Nenhum</option>${projects().map(p => `<option value="${esc(p.id)}" ${m.rec.projeto === p.id ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}</select>
+    ${m.rec.projeto && !m.c.pmo ? `<span class="field-help" style="margin:0">Sem dados de projeto: <a class="btn-link" href="#/p/${encodeURIComponent(m.rec.projeto)}">reconstrói o histórico</a>.</span>` : ''}</div>`;
+}
 
 /* ════════════════ Vistas ════════════════ */
 function folderPanel(full) {
@@ -858,6 +1366,7 @@ function viewMeeting(m) {
       ${m.people.length ? `<span translate="no">${icon('users')}${esc(LF.format(m.people.map(personLabel)))}</span>` : ''}
     </div>
     ${m.tags.length ? `<div class="tags">${m.tags.map(t => `<button class="tag-btn" type="button" data-search="${esc(t)}">#${esc(t)}</button>`).join('')}</div>` : ''}
+    ${projectSelect(m)}
     ${ribbon(m)}
     <div class="r-body" id="r-body">
       ${c.resumo ? `<section class="r-sec" aria-labelledby="res-h"><h2 id="res-h">Resumo Executivo</h2><p class="lead">${esc(curly(c.resumo))}</p></section>` : ''}
@@ -866,6 +1375,7 @@ function viewMeeting(m) {
       ${(c.temas || []).length ? `<section class="r-sec" aria-labelledby="tem-h"><h2 id="tem-h">Temas Discutidos</h2><div class="temas">${c.temas.map(t => { const s = parseClock(t.inicio); return `<div class="tema">${s != null ? timeBtn(t.inicio + (t.fim ? '–' + t.fim : ''), s) : '<span></span>'}<b>${esc(t.titulo)}</b><p>${esc(curly(t.resumo))}</p></div>`; }).join('')}</div></section>` : ''}
       ${(c.seccoes || []).filter(s => s.titulo !== 'Plano de Ação').map(renderSection).join('')}
       ${m.todos.length ? `<section class="r-sec" aria-labelledby="pa-h"><h2 id="pa-h">Plano de Ação</h2>${tasks}</section>` : ''}
+      ${pmoMeetingSection(m)}
       ${participation(m)}
       ${radar ? `<section class="r-sec radar" aria-labelledby="rad-h"><h2 id="rad-h">Radar de Comunicação</h2>${myNumbers(m)}
         ${c.radar?.correu_bem?.length ? `<h3>${icon('check')}<span>O que correu bem</span></h3><ul>${c.radar.correu_bem.map(i => `<li>${esc(curly(i))}</li>`).join('')}</ul>` : ''}
@@ -1137,6 +1647,12 @@ function viewHelp() {
       <li>Duplo clique em <b>Atualizar caderno.bat</b>. No VS Code, escreve “atualiza o caderno” no Kilo Code.</li>
       <li>Abre o caderno: a reunião aparece sozinha. Se o caderno já estiver aberto, aparece uns segundos depois de o Kilo Code terminar.</li></ol>
     <p>O caderno não precisa de estar aberto enquanto o Kilo Code trabalha. Se estiver, prepara antes um pedido com as métricas exatas, que o Kilo Code usa.</p>
+    <h2>Projetos: acompanhar a evolução</h2>
+    <ol><li>Em <a class="btn-link" href="#/projetos">Projetos</a>, cria um projeto (nome, descrição, palavras-chave, pessoas). O caderno também sugere projetos quando vê a mesma pessoa ou tema em 3 ou mais reuniões.</li>
+      <li>Confirma as reuniões que pertencem ao projeto. As novas são associadas pelo Kilo Code; podes mudar na página da reunião.</li>
+      <li>Clica em <b>Reconstruir o histórico</b>: o Kilo Code lê as atas antigas e monta a linha do tempo (marcos, backlog, riscos, decisões, satisfação).</li>
+      <li>A página do projeto mostra a tendência dos marcos, o estado reunião a reunião, o backlog, os alertas de PMO, as perguntas para a próxima reunião e um relatório para copiar.</li></ol>
+    <p>Para perceber cada gráfico, abre o <a class="btn-link" href="#/p/exemplo">projeto de exemplo</a>.</p>
     <h2>Plano B: copiar e colar</h2>
     <p>Se o modo pasta não estiver disponível, em <a class="btn-link" href="#/nova">Nova reunião</a> usa os quatro passos de copiar e colar.</p>
     <h2>No dia a dia</h2>
@@ -1171,7 +1687,11 @@ function route() {
   const [, v = '', arg = ''] = h.match(/^\/?([^/]*)\/?(.*)$/) || [];
   current = { view: v, id: null };
   let title = 'Caderno de reuniões';
-  if (v === 'r' && byId.has(arg)) { current.id = arg; const m = byId.get(arg); viewMeeting(m); title = m.title; }
+  const demoM = v === 'r' && !byId.has(arg) && DEMO?.meetings.find(x => x.id === arg);
+  if (v === 'r' && (byId.has(arg) || demoM)) { current.id = arg; const m = byId.get(arg) || demoM; viewMeeting(m); title = m.title; }
+  else if (v === 'projetos' && arg === 'novo') { current.view = 'projetos'; const sg = new URLSearchParams(location.hash.split('?')[1] || '').get('sug'); view.innerHTML = viewProjectNew(sg == null ? null : +sg); title = 'Novo projeto'; }
+  else if (v === 'projetos') { view.innerHTML = viewProjects(); title = 'Projetos'; }
+  else if (v === 'p') { current.view = 'p'; current.project = arg; view.innerHTML = viewProject(arg); title = projectById(arg)?.nome || 'Projeto'; }
   else if (v === 'nova') { current.view = 'nova'; view.innerHTML = viewNew(); title = 'Nova reunião'; }
   else if (v === 'tarefas') { view.innerHTML = viewTasks(); title = 'Tarefas'; }
   else if (v === 'pessoas') { view.innerHTML = viewPeople(); title = 'Pessoas'; }
@@ -1206,7 +1726,8 @@ search.addEventListener('keydown', e => {
 $('#chips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; typeFilter = typeFilter === b.dataset.type ? null : b.dataset.type; renderList(); writeUrlState(); });
 
 document.addEventListener('click', async e => {
-  const t = e.target.closest('[data-search],[data-action],[data-f],.ribbon-key,[data-seek],[data-alias],[data-inbox-who]'); if (!t) return;
+  const t = e.target.closest('[data-search],[data-action],[data-f],.ribbon-key,[data-seek],[data-alias],[data-inbox-who],[data-add-person]'); if (!t) return;
+  if (t.dataset.addPerson != null) { const inp = $('#pj-pes'); const cur = inp.value.split(';').map(x => x.trim()).filter(Boolean); if (!cur.some(x => samePerson(x, t.dataset.addPerson))) inp.value = [...cur, t.dataset.addPerson].join('; '); return; }
   if (t.classList.contains('ribbon-key')) {
     const rb = t.closest('[data-ribbon]'), on = t.getAttribute('aria-pressed') !== 'true';
     $$('.ribbon-key', rb).forEach(k => k.setAttribute('aria-pressed', 'false'));
@@ -1230,6 +1751,11 @@ document.addEventListener('click', async e => {
   else if (a === 'use-paste') { const txt = $('#paste-transcript').value; const r = TS.test(txt) ? { cues: parseVTT(txt), aproximado: false, fonte: 'vtt' } : { ...parsePlain(txt), fonte: 'texto' }; if (!r.cues.length) toast('Não reconheci falas neste texto. Cada fala deve começar pelo nome, ex.: “Ana Silva: …”.'); else acceptCues(r, 'Texto colado'); }
   else if (a === 'save-meeting') saveMeeting();
   else if (a === 'reset-wizard') { resetWizard(); rerenderWizard(); }
+  else if (a === 'project-report') { const pp = projectById(t.dataset.project); if (pp) copyText(projectReportText(pp), 'Relatório copiado. Cola-o num email ou no Teams.'); }
+  else if (a === 'history-copy') { const pp = projectById(t.dataset.project); if (pp) copyText(buildHistoryPrompt(pp), 'Pedido copiado. Cola-o no Kilo Code.'); }
+  else if (a === 'history-apply') { const pp = projectById(t.dataset.project); try { const n = applyHistory(pp, $('#hist-answer').value); await persist(`Histórico aplicado a ${plural(n, 'reunião', 'reuniões')}.`); rebuild(); route(); } catch (err) { toast(err.message); } }
+  else if (a === 'history-folder') { const pp = projectById(t.dataset.project); try { const inbox = await dirHandle.getDirectoryHandle(INBOX_DIR, { create: true }); const b = `${slug(pp.nome)}.historico`; await writeFile(inbox, `${b}.pedido.md`, buildHistoryPrompt(pp, `entrada/${b}.resposta.json`)); STATE.historicos = { ...(STATE.historicos || {}), [b]: pp.id }; await persist('Pedido de histórico pronto. Agora corre o Atualizar caderno.'); scanInbox(); } catch (err) { toast('Não foi possível escrever na pasta: ' + err.message); } }
+  else if (a === 'project-delete') { const pp = projectById(t.dataset.project); if (!pp || !confirm(`Apagar o projeto “${pp.nome}”? As reuniões ficam no caderno.`)) return; STATE.projetos = projects().filter(x => x.id !== pp.id); STATE.reunioes.forEach(r => { if (r.projeto === pp.id) delete r.projeto; }); await persist('Projeto apagado.'); rebuild(); renderNav(); go('#/projetos'); }
   else if (a === 'connect-folder') connectFolder();
   else if (a === 'relink') relinkFolder();
   else if (a === 'unlink') unlinkFolder();
@@ -1239,6 +1765,19 @@ document.addEventListener('click', async e => {
 });
 document.addEventListener('submit', async e => {
   const f = e.target.closest('form[data-form]'); if (!f) return; e.preventDefault();
+  if (f.dataset.form === 'project') {
+    const list = (v, sep) => v.split(sep).map(x => x.trim()).filter(Boolean);
+    const data = { nome: f.nome.value.trim(), descricao: f.descricao.value.trim(), palavras: list(f.palavras.value, ','), pessoas: list(f.pessoas.value, ';') };
+    if (!data.nome) return;
+    let p = f.dataset.id && projectById(f.dataset.id);
+    if (p) Object.assign(p, data); else { p = { id: `${slug(data.nome) || 'projeto'}-${uid().slice(-4)}`, criado: new Date().toISOString(), ...data }; STATE.projetos = [...projects(), p]; }
+    await persist(f.dataset.id ? 'Projeto atualizado.' : 'Projeto criado. Confirma as reuniões que lhe pertencem.'); renderNav(); go('#/p/' + encodeURIComponent(p.id)); route(); return;
+  }
+  if (f.dataset.form === 'assign') {
+    const ids = new Set([...f.querySelectorAll('input[name=m]:checked')].map(x => x.value)), pid = f.dataset.id;
+    STATE.reunioes.forEach(r => { if (ids.has(r.id)) r.projeto = pid; else if (r.projeto === pid) delete r.projeto; });
+    await persist(`${plural(ids.size, 'reunião associada', 'reuniões associadas')} ao projeto.`); rebuild(); route(); return;
+  }
   if (f.dataset.form === 'owner') { STATE.dono = f.nome.value.trim(); await persist('Nome guardado.'); renderBrand(); rebuild(); render(); }
   if (f.dataset.form === 'settings') {
     STATE.dono = f.nome.value.trim(); STATE.equipa = f.equipa.value.trim() || 'CIO Office Portugal';
@@ -1247,6 +1786,7 @@ document.addEventListener('submit', async e => {
   }
 });
 view.addEventListener('change', async e => {
+  if (e.target.matches('[data-proj-assign]')) { const r = STATE.reunioes.find(x => x.id === e.target.dataset.projAssign); if (!r) return; const pid = e.target.value; if (pid) { r.projeto = pid; const pp = projectById(pid); if (r.conteudo?.pmo && pp) { r.conteudo.pmo.projeto = pp.nome; assignCodes(pp, r.conteudo.pmo, meetings, r.id); } } else delete r.projeto; await persist(pid ? 'Reunião associada ao projeto.' : 'Reunião retirada do projeto.'); rebuild(); renderNav(); route(); return; }
   if (e.target.id === 's-modelo') { STATE.modelo_padrao = e.target.value; await persist('Tipo de resumo por omissão guardado.'); return; }
   if (e.target.matches('input[name="modelo"]')) { W.modelo = e.target.value; W.copied = false; wizardAnalyse(); rerenderWizard(); return; }
   if (e.target.id === 'w-date') { if (isISO(e.target.value)) { W.date = e.target.value; W.copied = false; wizardAnalyse(); rerenderWizard(); } return; }
@@ -1309,7 +1849,7 @@ const cmdk = $('#cmdk'), cq = $('#cmdk-q'), clist = $('#cmdk-list');
 let citems = [], csel = 0;
 function cmdkRender() {
   const w = words(cq.value), re = termRe(w);
-  const nav = [['#/nova', 'plus', 'Nova reunião'], ['#/', 'home', 'Início'], ['#/tarefas', 'tasks', 'Tarefas'], ['#/pessoas', 'users', 'Pessoas'], ['#/evolucao', 'chart', 'Evolução'], ['#/ajuda', 'help', 'Como usar'], ['#/definicoes', 'gear', 'Definições']]
+  const nav = [['#/nova', 'plus', 'Nova reunião'], ['#/', 'home', 'Início'], ['#/tarefas', 'tasks', 'Tarefas'], ['#/projetos', 'folder', 'Projetos'], ['#/pessoas', 'users', 'Pessoas'], ['#/evolucao', 'chart', 'Evolução'], ['#/ajuda', 'help', 'Como usar'], ['#/definicoes', 'gear', 'Definições']]
     .filter(([, , l]) => w.every(x => norm(l).includes(x))).map(([h, ic, l]) => ({ ic, title: l, run: () => go(h) }));
   const actions = [{ ic: THEME_ICON[theme], title: 'Mudar tema', key: 'tema escuro claro', run: cycleTheme }]
     .concat(current?.id ? [{ ic: 'copy', title: 'Copiar ata desta reunião', key: 'copiar ata email', run: () => copyText(ataText(byId.get(current.id)), 'Ata copiada.') }, { ic: 'printer', title: 'Imprimir ou guardar em PDF', key: 'imprimir pdf', run: () => setTimeout(() => window.print(), 50) }] : [])
@@ -1318,7 +1858,8 @@ function cmdkRender() {
     .map(m => ({ ic: 'doc', html: markStr(m.title, re), snip: w.length ? snippet(m, w, 80) : `${fmtDate(m.date, 'short')}, ${esc(m.type)}`, run: () => go(meetingHref(m)) }));
   const ts = w.length ? allTodos.filter(t => w.every(x => norm(t.text + ' ' + t.owner).includes(x))).slice(0, 5)
     .map(t => ({ ic: 'tasks', html: markStr(t.text, re), snip: `${esc(displayName(t.owner || 'Sem responsável'))}, ${esc(t.m.title)}`, run: () => go(meetingHref(t.m)) })) : [];
-  const groups = [['Reuniões', ms], ['Tarefas', ts], ['Navegar', nav], ['Ações', actions]].filter(g => g[1].length);
+  const pj = projects().filter(p => w.every(x => norm(p.nome + ' ' + (p.palavras || []).join(' ')).includes(x))).slice(0, 5).map(p => ({ ic: 'folder', html: markStr(p.nome, re), snip: p.descricao ? esc(p.descricao) : 'Projeto', run: () => go('#/p/' + encodeURIComponent(p.id)) }));
+  const groups = [['Projetos', pj], ['Reuniões', ms], ['Tarefas', ts], ['Navegar', nav], ['Ações', actions]].filter(g => g[1].length);
   citems = groups.flatMap(g => g[1]); csel = Math.min(csel, Math.max(0, citems.length - 1));
   let k = 0;
   clist.innerHTML = citems.length ? groups.map(([l, arr]) => `<li role="presentation" class="cmdk-group">${l}</li>` + arr.map(it => { const i = k++; return `<li role="option" id="cmdk-${i}" class="cmdk-item" data-i="${i}" aria-selected="${i === csel}">${icon(it.ic)}<span class="cmdk-main"><span class="cmdk-title">${it.html || esc(it.title)}</span>${it.snip ? `<span class="cmdk-snip">${it.snip}</span>` : ''}</span></li>`; }).join('')).join('')
@@ -1356,6 +1897,7 @@ window.addEventListener('beforeunload', e => { if (current?.view === 'nova' && W
 /* ════════════════ Arranque ════════════════ */
 (async () => {
   await loadState();
+  if (EXEMPLO_PROJETO) DEMO = { p: { ...EXEMPLO_PROJETO.projeto, id: 'exemplo' }, meetings: EXEMPLO_PROJETO.reunioes.map(r => toMeeting({ ...r, projeto: 'exemplo', exemplo: true })) };
   readUrlState(); applyTheme(); renderBrand(); rebuild(); renderNav(); renderList(); renderSaveState(); route();
   if (dirHandle && dirPerm === 'granted') writeFile(dirHandle, INSTR_FILE, genericInstructions()).catch(() => {});
   scanInbox();

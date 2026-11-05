@@ -26,9 +26,11 @@ def construir_html() -> Path:
         raise SystemExit("app.js não pode conter </script>.")
     css = (SRC / "estilo-base.css").read_text(encoding="utf-8") + (SRC / "estilo-caderno.css").read_text(encoding="utf-8")
     exemplos = (SRC / "exemplos.json").read_text(encoding="utf-8").replace("</", "<\\/")
+    ex_proj = SRC / "exemplo-projeto.json"
+    exemplo_projeto = ex_proj.read_text(encoding="utf-8").replace("</", "<\\/") if ex_proj.exists() else "null"
     logo = (ROOT / "marca" / "natixis-cib.svg").read_text(encoding="utf-8")
     html = (pagina.replace("%%CSS%%", css).replace("%%LOGO%%", logo)
-            .replace("%%EXEMPLOS%%", exemplos).replace("%%JS%%", js))
+            .replace("%%EXEMPLOS%%", exemplos).replace("%%EXEMPLO_PROJETO%%", exemplo_projeto).replace("%%JS%%", js))
     if "%%" in html.split("<script>")[0]:
         raise SystemExit("Ficou um marcador %%…%% por substituir.")
     DIST.mkdir(exist_ok=True)
