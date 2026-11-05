@@ -62,8 +62,26 @@ def construir_zip(html: Path) -> Path:
     return z
 
 
+def construir_zip_sem_bat(z: Path) -> Path:
+    """Igual ao ZIP normal, mas com o .bat guardado como .bat.txt (passa nos filtros de email/Teams)."""
+    out = DIST / "Caderno-de-Reunioes-CIO-Office-sem-bat.zip"
+    nota = ('NOTA: nesta versão o atalho chama-se "Atualizar caderno.bat.txt" para passar nos filtros de email/Teams.\r\n'
+            'Para o ativar: botão direito no ficheiro > Mudar o nome > apaga o ".txt" do fim > Enter > Sim.\r\n'
+            '(Se não vires a extensão: no Explorador, separador Ver > marca "Extensões de nomes de ficheiro".)\r\n\r\n').encode("utf-8")
+    with zipfile.ZipFile(z) as a, zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as b:
+        for i in a.infolist():
+            data, name = a.read(i.filename), i.filename
+            if name.endswith(".bat"):
+                name += ".txt"
+            if name.endswith("LEIA-ME.txt"):
+                data = nota + data
+            b.writestr(name, data)
+    return out
+
+
 if __name__ == "__main__":
     h = construir_html()
     z = construir_zip(h)
+    construir_zip_sem_bat(z)
     print(f"✓ {h.relative_to(ROOT)} ({h.stat().st_size // 1024} KB)")
     print(f"✓ {z.relative_to(ROOT)} ({z.stat().st_size // 1024} KB)")
