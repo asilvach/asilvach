@@ -20,9 +20,8 @@ Em cada reunião
 ---------------
 1. Teams > reunião > Gravações e transcrições > Transferir (.vtt ou .docx).
    Guarda o ficheiro na pasta "entrada".
-2. Com o caderno aberto no Edge, espera uns segundos.
-3. No Kilo Code escreve /reuniao e envia.
-4. A reunião aparece no caderno sozinha.
+2. No Kilo Code escreve /reuniao (ou "atualiza o caderno") e envia.
+3. Abre o caderno no Edge: a reunião aparece sozinha.
 
 Para experimentar: copia o ficheiro da pasta "Exemplo para experimentar"
 para a pasta "entrada".

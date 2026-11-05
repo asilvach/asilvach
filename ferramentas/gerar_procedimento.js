@@ -86,8 +86,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
     <section><h2>Em resumo</h2>
       <p>Depois de preparado (uma vez, 5 minutos), cada reunião são três gestos:</p>
-      <div class="flow"><div><b>1. Teams</b>Transfere a transcrição para a pasta <code>entrada</code>.</div><div><b>2. Kilo Code</b>Escreve <code>/reuniao</code> e envia.</div><div><b>3. Caderno</b>A reunião aparece sozinha, com ata, tarefas e o teu Radar.</div></div>
-      <p style="margin-top:4mm">O caderno e o Kilo Code não comunicam diretamente: trocam ficheiros na pasta <code>entrada</code>. O caderno prepara um pedido por transcrição; o Kilo Code escreve a resposta; o caderno importa-a e arruma tudo em <code>entrada/processadas</code>.</p></section>
+      <div class="flow"><div><b>1. Teams</b>Transfere a transcrição para a pasta <code>entrada</code>.</div><div><b>2. Kilo Code</b>Escreve <code>/reuniao</code> (ou “atualiza o caderno”) e envia.</div><div><b>3. Caderno</b>Abre-o: a reunião aparece sozinha, com ata, tarefas e o teu Radar.</div></div>
+      <p style="margin-top:4mm">O caderno e o Kilo Code não comunicam diretamente: trocam ficheiros na pasta <code>entrada</code>. O Kilo Code lê a transcrição e escreve a resposta; o caderno importa-a e arruma tudo em <code>entrada/processadas</code>. O caderno não precisa de estar aberto enquanto o Kilo Code trabalha.</p></section>
 
     <section><h2><span class="n">0</span>Preparar (uma vez)</h2>
       <ol><li>Copia a pasta <b>Caderno de Reuniões</b> do ZIP para o teu <b>OneDrive</b> (ex.: Documentos).</li>
@@ -109,16 +109,16 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       <ol><li>No Teams, abre a reunião no <b>Calendário</b> (ou o chat da reunião), <b>Gravações e transcrições</b>.</li>
         <li>Na transcrição, <b>Transferir</b> em <b>.vtt</b> (o <b>.docx</b> também serve).</li>
         <li>Guarda-o em <code>Caderno de Reuniões\\entrada</code>. Ajuda pôr a data no nome: <code>2026-11-05 Comité IT.vtt</code>.</li></ol>
-      <p>O caderno (aberto no Edge) deteta o ficheiro em poucos segundos. Na primeira vez pergunta qual és tu:</p>
+      <p>Se o caderno estiver aberto, deteta o ficheiro em poucos segundos e prepara um pedido com as métricas exatas. Se não te reconhecer, pergunta qual és tu:</p>
       ${img('quem', 'Quem és tu?')}</section>
 
     <section><h2><span class="n">2</span>Pedir o resumo ao Kilo Code</h2>
-      <p>Quando o caderno mostrar <b>transcrição pronta para o Kilo Code</b>:</p>
-      ${img('pronta', 'Transcrição pronta')}
-      <ol style="margin-top:3mm"><li>No Kilo Code, escreve <code>/reuniao</code> e envia.</li><li>Espera até ele dizer que terminou. Não precisas de copiar nada.</li></ol></section>
+      <ol><li>No Kilo Code, escreve <code>/reuniao</code> e envia. Também podes escrever “atualiza o caderno”.</li><li>Espera até ele dizer que terminou. Não precisas de copiar nada.</li></ol>
+      <p>Com o caderno aberto, vês o estado na caixa de entrada:</p>
+      ${img('pronta', 'Transcrição pronta')}</section>
 
     <section class="break"><h2><span class="n">3</span>A reunião aparece no caderno</h2>
-      <p>Uns segundos depois, o caderno importa a resposta e mostra <b>Nova reunião importada</b>. Cada reunião tem: resumo, contexto (ligação a reuniões anteriores), temas com os minutos, decisões, plano de ação, participação de cada pessoa, o teu Radar de Comunicação e a transcrição completa.</p>
+      <p>Abre o caderno (ou espera uns segundos, se já estiver aberto): ele importa a resposta e mostra <b>Nova reunião importada</b>. Cada reunião tem: resumo, contexto (ligação a reuniões anteriores), temas com os minutos, decisões, plano de ação, participação de cada pessoa, o teu Radar de Comunicação e a transcrição completa.</p>
       ${img('reuniao', 'Uma reunião no caderno')}</section>
 
     <section><h2>Tarefas e atas</h2>
@@ -135,7 +135,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
 
     <section class="break"><h2>Se algo não correr bem</h2><table>
       <tr><td>O Kilo Code não mostra o /reuniao</td><td>Confirma que abriste a pasta <b>Caderno de Reuniões</b> no VS Code. Escreve <code>/reload</code> ou abre uma conversa nova.</td></tr>
-      <tr><td>O Kilo Code diz para abrir o caderno</td><td>O caderno ainda não preparou o pedido. Abre-o no Edge (com a pasta ligada), espera uns segundos e volta a escrever <code>/reuniao</code>.</td></tr>
+      <tr><td>O Kilo Code diz para abrir o caderno</td><td>Acontece só antes da primeira utilização: abre o caderno no Edge, liga a pasta e volta a escrever <code>/reuniao</code>.</td></tr>
       <tr><td>O caderno mostra “resposta não é válida”</td><td>No Kilo Code, escreve outra vez <code>/reuniao</code>. Ele refaz a resposta.</td></tr>
       <tr><td>“Voltar a ligar a pasta”</td><td>Clica no botão e escolhe <b>Permitir</b>. É uma proteção do Edge.</td></tr>
       <tr><td>A página abre em branco</td><td>Abre o ficheiro com o Microsoft Edge ou o Google Chrome.</td></tr>

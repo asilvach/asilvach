@@ -210,7 +210,7 @@ let STATE = structuredClone(DEFAULT_STATE);
 let EXEMPLOS = []; try { EXEMPLOS = JSON.parse($('#exemplos').textContent) || []; } catch (e) {}
 let dirHandle = null, dirPerm = 'none', inboxBusy = false;
 let INBOX = { aguardar: [], quem: [], erros: [] }; // aguardar: pedidos à espera do Kilo Code; quem: transcrições sem "quem és tu"
-const DATA_FILE = 'caderno-dados.json', INBOX_DIR = 'entrada', DONE_DIR = 'processadas';
+const INSTR_FILE = 'instrucoes-para-o-kilo.md', DATA_FILE = 'caderno-dados.json', INBOX_DIR = 'entrada', DONE_DIR = 'processadas';
 const TRANSCRIPT_RE = /\.(vtt|docx|txt)$/i;
 const FS_OK = 'showDirectoryPicker' in window;
 const idb = (() => {
@@ -246,7 +246,9 @@ async function saveLocal() {
 async function persist(msg) {
   STATE.guardado_em = new Date().toISOString();
   await saveLocal();
-  if (dirHandle && dirPerm === 'granted') { try { await writeFile(dirHandle, DATA_FILE, JSON.stringify(STATE)); } catch (e) { dirPerm = 'prompt'; } }
+  if (dirHandle && dirPerm === 'granted') {
+    try { await writeFile(dirHandle, DATA_FILE, JSON.stringify(STATE)); await writeFile(dirHandle, INSTR_FILE, genericInstructions()); } catch (e) { dirPerm = 'prompt'; }
+  }
   renderSaveState(); if (msg) toast(msg);
 }
 function renderSaveState() {
@@ -292,6 +294,15 @@ async function importData(file) {
   } catch (e) { toast(e.message); }
 }
 
+/* Instruções para o Kilo Code processar uma transcrição mesmo com o caderno fechado */
+function genericInstructions() {
+  const recent = meetings.filter(m => !m.exemplo).slice(0, 8);
+  const open = allTodos.filter(t => !isDone(t) && !t.m.exemplo).slice(0, 30).map(t => ({ code: 'T-' + t.key, t }));
+  const job = { generic: true, modelo: STATE.modelo_padrao || 'auto', data: null, date: '', turns: [], related: recent, pendentes: open, aproximado: false };
+  return `<!-- Gerado automaticamente pelo Caderno de Reuniões (${new Date().toISOString()}). Não edites: é reescrito sempre que o caderno guarda. -->\n\n` +
+    buildPrompt(job, 'entrada/NOME.resposta.json, em que NOME é o nome do ficheiro da transcrição sem a extensão');
+}
+
 /* ── Caixa de entrada (modo pasta) ── */
 const baseName = n => n.replace(/\.(vtt|docx|txt|pedido\.md|resposta\.json|erro\.txt)$/i, '');
 const dateFromFile = (name, lastModified) => { const m = name.match(/(\d{4})[-_.](\d{2})[-_.](\d{2})/); return m ? `${m[1]}-${m[2]}-${m[3]}` : (lastModified ? localISO(new Date(lastModified)) : TODAY); };
@@ -316,7 +327,7 @@ function recordFromJob(job, p) {
 }
 function closePending(p, codes, recId) {
   for (const code of p.tarefas_concluidas || []) {
-    const key = codes[code]; const t = key && allTodos.find(x => x.key === key);
+    const key = codes[code] || String(code).replace(/^T-/, ''); const t = key && allTodos.find(x => x.key === key);
     if (t) { t.t.feito = true; t.t.fechada_em = recId; }
   }
 }
@@ -356,7 +367,8 @@ async function scanInbox() {
           await inbox.removeEntry(o.resposta); erros.push({ base: b, msg: err.message }); continue;
         }
         const f = await fileFromInbox(inbox, o.transcricao), r = await readTranscript(f);
-        const job = prepareJob({ ...r, alias: job0?.alias ?? (STATE.aliases || []).find(a => r.cues.some(c => samePerson(c.speaker, a))) ?? null, date: job0?.date || dateFromFile(o.transcricao, f.lastModified), modelo: job0?.modelo || STATE.modelo_padrao || 'auto', nome: o.transcricao });
+        const fromAI = p.eu_na_transcricao && [...new Set(r.cues.map(c => c.speaker))].find(sp => samePerson(sp, p.eu_na_transcricao));
+        const job = prepareJob({ ...r, alias: job0?.alias ?? fromAI ?? [...new Set(r.cues.map(c => c.speaker))].find(sp => isMe(sp)) ?? null, date: job0?.date || dateFromFile(o.transcricao, f.lastModified), modelo: job0?.modelo || STATE.modelo_padrao || 'auto', nome: o.transcricao });
         const rec = recordFromJob(job, p);
         rememberAlias(job.alias);
         STATE.reunioes.push(rec);
@@ -521,15 +533,19 @@ function buildPrompt(w, respostaPara) {
   const escolha = isAuto ? `\nESCOLHA DO MODELO: escolhe UM destes modelos, o mais adequado ao conteúdo, e indica-o em "tipo". Usa as secções desse modelo, por esta ordem:\n${Object.values(MODELOS).filter(x => x.seccoes.length).map(x => `- "${x.nome}" (${x.foco}): ${x.seccoes.map(([t, ti]) => `${ti} [${t}]`).join(', ')}`).join('\n')}\nFormato de cada tipo de secção:\n${Object.entries(SEC_DESC).map(([t, d]) => `- ${t}: ${d}`).join('\n')}\n` : '';
   const secs = isAuto ? '    {"tipo": "decisoes", "titulo": "Decisões Tomadas", "itens": ["..."]}' : M.seccoes.map(secLine).join(',\n');
   return `És um Secretário Executivo de Elite e coach de comunicação da equipa ${TEAM()} (Natixis).
-Analisa a transcrição de reunião no fim deste pedido e responde APENAS com um objeto JSON válido: sem texto antes ou depois, sem blocos de código, sem comentários. Escreve em português europeu.
+Analisa a transcrição de reunião ${w.generic ? 'indicada (ficheiro na pasta entrada)' : 'no fim deste pedido'} e responde APENAS com um objeto JSON válido: sem texto antes ou depois, sem blocos de código, sem comentários. Escreve em português europeu.
 
 ${respostaPara ? `ONDE RESPONDER: escreve a resposta (só o objeto JSON) no ficheiro ${respostaPara}. Não alteres nenhum outro ficheiro.\n\n` : ''}MODELO PEDIDO: ${M.titulo}. Foco: ${M.foco}${escolha}
-DATA DA REUNIÃO: ${w.date} (usa-a para converter prazos relativos como "sexta-feira" em datas AAAA-MM-DD).
+${w.generic ? `DATA DA REUNIÃO: a data no início do nome do ficheiro (AAAA-MM-DD); se não houver, a data de modificação do ficheiro. Usa-a para converter prazos relativos como "sexta-feira" em datas AAAA-MM-DD.
+DONO DO CADERNO: ${OWNER() || 'não indicado'}${(STATE.aliases || []).length ? ` (nas transcrições costuma aparecer como ${LF.format(STATE.aliases.map(a => `"${a}"`))})` : ''}. Identifica qual dos oradores é esta pessoa e indica o nome exatamente como aparece na transcrição em "eu_na_transcricao" (null se não participou). O Radar de Comunicação é sobre esta pessoa. Nas tarefas desta pessoa usa "responsavel": "Eu".
+
+MÉTRICAS: o caderno calcula sozinho o tempo de fala e o resto a partir dos tempos da transcrição. No Radar, baseia-te no que a pessoa disse e em como o disse (bordões como "tipo" ou "pronto", hesitações como "acho que", monólogos longos, perguntas feitas).
+` : `DATA DA REUNIÃO: ${w.date} (usa-a para converter prazos relativos como "sexta-feira" em datas AAAA-MM-DD).
 DONO DO CADERNO: ${OWNER() || 'não indicado'}${me ? ` (na transcrição aparece como "${me.nome}")` : ''}. O Radar de Comunicação é sobre esta pessoa. Nas tarefas desta pessoa usa "responsavel": "Eu".
 
 MÉTRICAS JÁ CALCULADAS (exatas; não as recalcules, usa-as no Radar; partilha justa de tempo de fala: ${pctf(fair)}):
 ${metricas}
-
+`}
 REUNIÕES ANTERIORES COM AS MESMAS PESSOAS (para o campo "contexto"):
 ${ctx}
 
@@ -549,7 +565,7 @@ REGRAS
 
 FORMATO DA RESPOSTA (JSON):
 {
-${isAuto ? '  "tipo": "Ata | Destaques | Dados | Intenção | Conceitos",\n' : ''}  "titulo": "título curto e específico da reunião",
+${isAuto ? '  "tipo": "Ata | Destaques | Dados | Intenção | Conceitos",\n' : ''}${w.generic ? '  "eu_na_transcricao": "nome do dono do caderno tal como aparece na transcrição, ou null",\n' : ''}  "titulo": "título curto e específico da reunião",
   "etiquetas": ["3 a 8 palavras-chave: projetos, clientes, temas"],
   "resumo": "...",
   "contexto": "...",
@@ -562,8 +578,7 @@ ${secs}
   "radar": {"correu_bem": ["..."], "a_melhorar": ["..."], "experimenta": "..."}
 }
 
-TRANSCRIÇÃO (${w.turns.length} intervenções${d ? ', ' + fmtDur(d.duracao_s) : ''}):
-${lines}`;
+${w.generic ? 'TRANSCRIÇÃO: lê o ficheiro da transcrição inteiro (.vtt, .docx ou .txt na pasta entrada). Cada fala tem o nome de quem fala e os tempos.' : `TRANSCRIÇÃO (${w.turns.length} intervenções${d ? ', ' + fmtDur(d.duracao_s) : ''}):\n${lines}`}`;
 }
 function extractJSON(text) {
   let t = String(text || '').trim().replace(/^﻿/, '').replace(/```(?:json)?/gi, '');
@@ -594,7 +609,7 @@ function normalizeAI(o, modelo) {
   const TIPOS_OK = ['Ata', 'Destaques', 'Dados', 'Intenção', 'Conceitos'];
   const tipoIn = str(o.tipo), tipo = TIPOS_OK.find(t => norm(t) === norm(tipoIn)) || null;
   const c = {
-    tipo, titulo: str(o.titulo), etiquetas: arr(o.etiquetas).map(str).filter(Boolean).slice(0, 10),
+    tipo, eu_na_transcricao: o.eu_na_transcricao == null ? null : str(o.eu_na_transcricao), titulo: str(o.titulo), etiquetas: arr(o.etiquetas).map(str).filter(Boolean).slice(0, 10),
     resumo: str(o.resumo), contexto: str(o.contexto),
     temas: arr(o.temas).map(t => ({ titulo: str(t?.titulo), inicio: str(t?.inicio), fim: str(t?.fim), resumo: str(t?.resumo) })).filter(t => t.titulo),
     seccoes: arr(o.seccoes).map(sec).filter(Boolean),
@@ -1119,9 +1134,9 @@ function viewHelp() {
       <li>No VS Code: <b>File</b>, <b>Open Folder…</b>, a mesma pasta. No Kilo Code, escreve <code>/</code> e confirma que aparece <b>reuniao</b>.</li></ol>
     <h2>Em cada reunião</h2>
     <ol><li>No Teams: reunião, <b>Gravações e transcrições</b>, <b>Transferir</b> (.vtt ou .docx). Guarda em <code>Caderno de Reuniões\entrada</code>.</li>
-      <li>Com o caderno aberto, espera uns segundos. Na primeira vez escolhe quem és.</li>
-      <li>No Kilo Code, escreve <b>/reuniao</b> e envia.</li>
-      <li>A reunião aparece no caderno quando o Kilo Code terminar.</li></ol>
+      <li>No Kilo Code, escreve <b>/reuniao</b> (ou “atualiza o caderno”) e envia.</li>
+      <li>Abre o caderno: a reunião aparece sozinha. Se o caderno já estiver aberto, aparece uns segundos depois de o Kilo Code terminar.</li></ol>
+    <p>O caderno não precisa de estar aberto enquanto o Kilo Code trabalha. Se estiver, prepara antes um pedido com as métricas exatas, que o Kilo Code usa.</p>
     <h2>Plano B: copiar e colar</h2>
     <p>Se o modo pasta não estiver disponível, em <a class="btn-link" href="#/nova">Nova reunião</a> usa os quatro passos de copiar e colar.</p>
     <h2>No dia a dia</h2>
@@ -1342,6 +1357,7 @@ window.addEventListener('beforeunload', e => { if (current?.view === 'nova' && W
 (async () => {
   await loadState();
   readUrlState(); applyTheme(); renderBrand(); rebuild(); renderNav(); renderList(); renderSaveState(); route();
+  if (dirHandle && dirPerm === 'granted') writeFile(dirHandle, INSTR_FILE, genericInstructions()).catch(() => {});
   scanInbox();
 })();
 })();

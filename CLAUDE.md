@@ -12,6 +12,10 @@ Kilo Code, valida a resposta (JSON) que a pessoa cola de volta e guarda tudo loc
   `.kilocode/workflows/reuniao.md`) escreve `NOME.resposta.json`; o caderno espera 8 s de
   estabilidade, valida, importa, guarda em `caderno-dados.json` e move tudo para `entrada/processadas`.
   `STATE.fila` guarda os pedidos pendentes e `STATE.importados` evita importar duas vezes.
+  O Kilo Code também trabalha com o caderno fechado: lê `instrucoes-para-o-kilo.md` (gerado pelo
+  caderno sempre que guarda: dono, aliases, reuniões recentes, tarefas pendentes com códigos `T-<key>`)
+  e a transcrição, e indica `eu_na_transcricao` na resposta. Frases como "atualiza o caderno" fazem o
+  mesmo que `/reuniao` (ver `AGENTS.md`).
 - **Plano B (copiar e colar):** Nova reunião → escolhe o ficheiro e quem é → Copiar pedido → cola no
   Kilo Code → cola a resposta → Guardar reunião.
 - Métricas (tempo de fala, ritmo, bordões, hesitações, interrupções) calculadas em JS a partir
