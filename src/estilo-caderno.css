@@ -160,3 +160,27 @@ details.panel > summary::-webkit-details-marker { display: none; }
   .rv-item { padding: var(--s-3); }
   .todo-item .ev { padding-left: 0; }
 }
+
+/* ── Coaching numa janela à parte ── */
+#coach { padding: 0; border: 1px solid var(--line); border-radius: var(--r-lg); width: min(760px, calc(100vw - 32px)); max-height: calc(100dvh - 64px); margin: 32px auto auto; background: var(--paper); color: var(--ink); box-shadow: var(--pop-shadow); overflow-y: auto; overscroll-behavior: contain; }
+#coach::backdrop { background: var(--scrim); }
+.coach-head { position: sticky; top: 0; z-index: 1; display: flex; gap: var(--s-4); justify-content: space-between; align-items: flex-start; padding: var(--s-5) var(--s-6) var(--s-4); background: var(--paper); border-bottom: 1px solid var(--line); }
+.coach-head h2 { margin: 0; font-size: var(--t-xl); }
+.coach-head p { margin: var(--s-1) 0 0; font-size: var(--t-sm); color: var(--ink-3); }
+.coach-body { padding: var(--s-5) var(--s-6); }
+.coach-body h3 { display: flex; align-items: center; gap: var(--s-2); margin: var(--s-6) 0 var(--s-2); font-size: var(--t-base); }
+.coach-body .r-sec { margin-top: var(--s-8); }
+.coach-focus { margin: 0 0 var(--s-5); max-width: none; }
+.coach-foot { position: sticky; bottom: 0; display: flex; justify-content: flex-end; gap: var(--s-2); padding: var(--s-4) var(--s-6); background: var(--paper); border-top: 1px solid var(--line); }
+.radar-stat .delta { display: block; margin-top: var(--s-1); font-size: var(--t-xs); color: var(--ink-3); }
+.radar-stat .delta.up { color: var(--ok); }
+.radar-stat .delta.down { color: var(--warn); }
+@media (prefers-reduced-motion: no-preference) {
+  #coach[open] { animation: coach-in var(--dur-short) var(--ease-out); }
+  @keyframes coach-in { from { opacity: 0; transform: translateY(8px); } }
+}
+@media (max-width: 60rem) {
+  #coach { width: 100vw; max-width: 100vw; max-height: 92dvh; margin: auto 0 0; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .coach-head, .coach-body, .coach-foot { padding-inline: var(--s-4); }
+}
+@media print { #coach { display: none !important; } }

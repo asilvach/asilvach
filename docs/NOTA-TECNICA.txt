@@ -51,8 +51,8 @@ Dados
   alterações são juntadas registo a registo antes de cada gravação (nada é
   sobrescrito por uma cópia antiga). Cópias de conflito do OneDrive
   (caderno-dados-*.json) são detetadas e podem ser juntadas.
-- Coaching de comunicação: opcional e desligado por omissão. Só analisa o
-  próprio utilizador; não avalia outras pessoas.
+- Coaching de comunicação: numa janela à parte, pode ser desligado nas
+  Definições. Só analisa o próprio utilizador; não avalia outras pessoas.
 - Apagar: Definições > Apagar todas as reuniões; e apagar o ficheiro .json.
 
 Requisitos

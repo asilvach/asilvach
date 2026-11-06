@@ -38,7 +38,8 @@ outros), não de gestão de equipas.
   (`mergeState`: por id, ganha `alterado_em` mais recente; `apagados` = marcas de apagado; `origem` evita
   importações duplicadas) antes de gravar. Qualquer alteração a um registo chama `touch()`. Cópias de
   conflito do OneDrive (`caderno-dados-*.json`) aparecem em `CONFLITOS`.
-- Coaching (`STATE.coaching`, desligado por omissão): Radar, Evolução e participação; só sobre o dono,
+- Coaching (`STATE.coach`, ligado por omissão): botão "Coaching" na reunião abre `#coach` (`coachPanel`: foco,
+  números com comparação à reunião anterior, Radar, participação) e a vista Evolução; só sobre o dono,
   nunca avalia outras pessoas nem entra na saúde dos projetos.
 - Contexto e seguimento: o pedido inclui reuniões anteriores com as mesmas pessoas e as tarefas
   em aberto (códigos T1…); a resposta indica `tarefas_concluidas` e o caderno fecha-as.

@@ -15,7 +15,7 @@ Prioridade = valor no dia a dia ÷ esforço. ✅ feito · 🔜 próximo · 💡 
 | ✅ | Tarefas: "As minhas" e "À espera de outros"; Pessoas mostra o que está à espera de cada um |
 | ✅ | Ctrl K encontra decisões e salta para o minuto |
 | ✅ | Sincronização sem perdas: junção registo a registo, apagados registados, sem importações duplicadas, aviso de falha de escrita, cópias de conflito do OneDrive |
-| ✅ | Coaching opcional (desligado por omissão), sem avaliar outras pessoas; saúde dos projetos só com factos ditos |
+| ✅ | Coaching numa janela à parte (botão "Coaching" na reunião), com comparação à reunião anterior; não avalia outras pessoas; saúde dos projetos só com factos ditos |
 | ✅ | "Cumpridas no prazo" só com data de conclusão; Edge ou Chrome em todas as mensagens |
 
 ## v4: caderno autónomo para ambiente fechado

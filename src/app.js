@@ -81,6 +81,7 @@ const ICONS = {
   help: '<circle cx="12" cy="12" r="9"/><path d="M9.5 9a2.5 2.5 0 1 1 3.5 2.3c-.6.3-1 .9-1 1.6V14M12 17h.01"/>',
   gear: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/>',
   chevron: '<path d="m9 6 6 6-6 6"/>',
+  close: '<path d="M6 6l12 12M18 6 6 18"/>',
   folder: '<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M3 10h18"/>',
   save: '<path d="M5 3h11l3 3v15H5z"/><path d="M8 3v5h8V3M8 21v-7h8v7"/>',
 };
@@ -206,7 +207,7 @@ function analyse(turns, euAlias) {
    Dados: IndexedDB do navegador e, com o modo pasta, o ficheiro caderno-dados.json na pasta do caderno.
    Modo pasta: o caderno vigia entrada/, prepara um .pedido.md por transcrição e importa o .resposta.json
    que o Kilo Code lá escreve. */
-const DEFAULT_STATE = { versao: 3, guardado_em: null, dono: '', aliases: [], equipa: 'CIO Office Portugal', coaching: false, reunioes: [], fila: [], importados: [], projetos: [], apagados: {} };
+const DEFAULT_STATE = { versao: 3, guardado_em: null, dono: '', aliases: [], equipa: 'CIO Office Portugal', coach: true, reunioes: [], fila: [], importados: [], projetos: [], apagados: {} };
 let STATE = structuredClone(DEFAULT_STATE);
 let EXEMPLOS = []; try { EXEMPLOS = JSON.parse($('#exemplos').textContent) || []; } catch (e) {}
 let EXEMPLO_PROJETO = null; try { EXEMPLO_PROJETO = JSON.parse($('#exemplo-projeto')?.textContent || 'null'); } catch (e) {}
@@ -696,7 +697,7 @@ const ITEM_KINDS = [
 const KIND_LABEL = Object.fromEntries(ITEM_KINDS.map(([k, one]) => [k, one]));
 const isTaskKind = k => k === 'tarefas' || k === 'pedidos';
 const itemText = it => it.acao || it.texto || '';
-const coachingOn = () => !!STATE.coaching;
+const coachingOn = () => STATE.coach !== false; // botão Coaching nas reuniões e vista Evolução
 
 function buildPrompt(w, respostaPara) {
   const d = w.data, me = d?.oradores.find(o => o.eu);
@@ -1166,9 +1167,36 @@ function participation(m) {
       <tbody>${d.oradores.map((o, i) => `<tr><td><span class="key" style="--c:var(--sp${col[i]})"></span> <span translate="no">${esc(personLabel(o.nome))}</span>${o.eu || isMe(o.nome) ? ' <span class="badge me">tu</span>' : ''}</td><td class="n">${fmtDur(o.tempo_s)}</td><td class="n">${pctf(o.pct)}</td><td class="n">${nf(o.intervencoes)}</td></tr>`).join('')}</tbody></table></div>
   </section>`;
 }
+/* Coaching: numa janela à parte, para não pesar na leitura da reunião. Só sobre ti. */
+function coachPanel(m) {
+  const c = m.c, me = meOf(m);
+  return `<div class="coach-head"><div><h2 id="coach-h">O teu coaching</h2><p>${esc(m.title)}, ${fmtDate(m.date, 'short')}. Só sobre como tu falaste; não avalia as outras pessoas.</p></div>
+      <button class="icon-btn" type="button" data-action="coach-close" aria-label="Fechar">${icon('close')}</button></div>
+    <div class="coach-body">
+      ${c.radar?.experimenta ? `<div class="tip coach-focus"><strong>Experimenta na próxima:</strong> ${esc(curly(c.radar.experimenta))}</div>` : ''}
+      ${me ? myNumbers(m) : `<p class="muted">Não sei qual és tu nesta reunião. Indica como apareces nas transcrições em <a class="btn-link" href="#/definicoes">Definições</a>.</p>`}
+      ${c.radar?.correu_bem?.length ? `<h3>${icon('check')}<span>O que correu bem</span></h3><ul>${c.radar.correu_bem.map(i => `<li>${esc(curly(i))}</li>`).join('')}</ul>` : ''}
+      ${c.radar?.a_melhorar?.length ? `<h3>${icon('up')}<span>A melhorar</span></h3><ul>${c.radar.a_melhorar.map(i => `<li>${esc(curly(i))}</li>`).join('')}</ul>` : ''}
+      ${participation(m)}
+    </div>
+    <div class="coach-foot"><a class="btn" href="#/evolucao" data-action="coach-close-nav">${icon('chart')}Ver a tua evolução</a><button class="btn" type="button" data-action="coach-close">Fechar</button></div>`;
+}
+function openCoach() {
+  const m = byId.get(current?.id) || DEMO?.meetings.find(x => x.id === current?.id); if (!m) return;
+  const d = $('#coach'); d.innerHTML = coachPanel(m); d.showModal(); d.scrollTop = 0;
+}
 function myNumbers(m) {
   const me = meOf(m); if (!me) return '';
   const n = m.data.oradores.length, fair = 100 / Math.max(2, n);
+  // Comparação com a tua reunião anterior: para veres se estás a melhorar no que importa
+  const prevM = meetings.filter(x => x !== m && meOf(x) && (x.date || '') <= (m.date || '')).find(x => x.date < m.date || x.rec.criado_em < m.rec.criado_em), prev = prevM && meOf(prevM);
+  const BETTER = { pct: 'mid', ppm: 'mid', bordoes_100: 'low', hesitacoes_100: 'low', perguntas: 'high', maior_s: 'low', interrompeu: 'low' };
+  const delta = (k, fmt) => {
+    if (!prev || prev[k] == null) return '';
+    const d = me[k] - prev[k]; if (Math.abs(d) < (k === 'pct' ? 1 : k.endsWith('_100') ? 0.2 : 1)) return '<span class="delta">igual à anterior</span>';
+    const good = BETTER[k] === 'low' ? d < 0 : BETTER[k] === 'high' ? d > 0 : Math.abs(me[k] - (k === 'pct' ? fair : 145)) < Math.abs(prev[k] - (k === 'pct' ? 100 / Math.max(2, prevM.data.oradores.length) : 145));
+    return `<span class="delta ${good ? 'up' : 'down'}">${d > 0 ? '+' : '−'}${fmt(Math.abs(d))} face à anterior</span>`;
+  };
   const cards = [
     ['Tempo de fala', pctf(me.pct), status('pct', me.pct, { n }), `Partilha justa: ${pctf(fair)} entre ${n} pessoas`],
     m.aproximado ? null : ['Ritmo', `${nf(me.ppm)} ppm`, status('ppm', me.ppm), 'Ideal entre 120 e 170'],
@@ -1178,7 +1206,8 @@ function myNumbers(m) {
     ['Maior monólogo', fmtDur(me.maior_s), status('maior_s', me.maior_s), 'Ideal abaixo de 90 s'],
     m.aproximado ? null : ['Interrupções', `${nf(me.interrompeu)} feitas`, status('interrompeu', me.interrompeu), `${nf(me.interrompido)} sofridas (estimativa)`],
   ].filter(Boolean);
-  return `<div class="radar-stats">${cards.map(([l, v, s, h]) => `<div class="radar-stat"><div class="top"><span>${l}</span><span class="badge ${s}">${STATUS_LABEL[s]}</span></div><div class="v">${v}</div><div class="h">${esc(h)}</div></div>`).join('')}</div>`;
+  const keys = { 'Tempo de fala': ['pct', v => nf(v) + ' pp'], Ritmo: ['ppm', v => nf(v) + ' ppm'], Bordões: ['bordoes_100', v => nf(v, 1)], Hesitações: ['hesitacoes_100', v => nf(v, 1)], 'Perguntas feitas': ['perguntas', v => nf(v)], 'Maior monólogo': ['maior_s', v => fmtDur(v)], Interrupções: ['interrompeu', v => nf(v)] };
+  return `<div class="radar-stats">${cards.map(([l, v, s, h]) => `<div class="radar-stat"><div class="top"><span>${l}</span><span class="badge ${s}">${STATUS_LABEL[s]}</span></div><div class="v">${v}</div><div class="h">${esc(h)}</div>${keys[l] ? delta(...keys[l]) : ''}</div>`).join('')}</div>`;
 }
 function lineChart(pts, opt = {}) {
   const W = 340, H = 130, P = { l: 30, r: 10, t: 10, b: 22 };
@@ -1520,7 +1549,7 @@ function viewHome() {
   const byDue = arr => arr.slice().sort((a, b) => (a.due || '9999').localeCompare(b.due || '9999') || (b.m.date || '').localeCompare(a.m.date || ''));
   const next = byDue(mine).slice(0, 6), nextW = byDue(waiting).slice(0, 6);
   const toConfirm = meetings.filter(m => !m.exemplo).reduce((n, m) => n + m.flags, 0);
-  const last = meetings[0], lastTip = meetings.find(m => m.tip);
+  const last = meetings[0];
   const ps = projects().map(p => ({ p, M: projectMetrics(p) }));
   const recent = `<section class="panel" aria-labelledby="recent-h"><div class="panel-head"><h2 id="recent-h">Reuniões recentes</h2></div>
     <div class="rows">${meetings.slice(0, 6).map(m => `<a class="row-link" href="${meetingHref(m)}"><div class="row-main"><div class="row-title">${esc(m.title)}</div><div class="row-sub"><span>${fmtDate(m.date, 'short')}</span>${m.dur ? `<span>${fmtDur(m.dur)}</span>` : ''}<span>${plural(m.people.length, 'pessoa', 'pessoas')}</span></div></div><span class="badge">${esc(m.type)}</span></a>`).join('')}</div></section>`;
@@ -1554,7 +1583,7 @@ function viewHome() {
           ${nextW.length ? `<div>${nextW.map(taskRow).join('')}</div>` : '<p class="muted">Ninguém te deve nada.</p>'}</section>` : (projPanel || recent)}
       </div>
       ${knowsMe() ? `<div class="cols-2">${recent}${projPanel}</div>` : (projPanel ? recent : '')}
-      ${coachingOn() && lastTip ? `<div class="tip"><strong>Foco de comunicação:</strong> ${esc(curly(lastTip.tip))} <a class="btn-link" href="#/evolucao">Ver a tua evolução</a></div>` : ''}` : ''}
+` : ''}
     </div>
   </div>`;
 }
@@ -1753,6 +1782,7 @@ function viewMeeting(m) {
     <nav class="crumbs" aria-label="Caminho"><a href="${withState('#/')}">Início</a><span aria-hidden="true">/</span><span>${esc(m.type)}</span></nav>
     <div class="r-title-row"><h1 id="r-title" tabindex="-1">${esc(m.title)}</h1>${m.exemplo ? '<span class="badge">Exemplo</span>' : ''}
       <div class="r-actions actions">
+        ${radar ? `<button class="btn" type="button" data-action="coach" aria-haspopup="dialog">${icon('mic')}Coaching</button>` : ''}
         <button class="btn" type="button" data-action="copy-ata">${icon('copy')}Copiar ata</button>
         <button class="icon-btn" type="button" data-action="print" aria-label="Imprimir ou guardar em PDF" title="Imprimir ou guardar em PDF">${icon('printer')}</button>
         ${m.exemplo ? '' : `<button class="icon-btn" type="button" data-action="delete" aria-label="Apagar esta reunião" title="Apagar esta reunião">${icon('trash')}</button>`}
@@ -1774,11 +1804,6 @@ function viewMeeting(m) {
       ${v2 ? structuredBody(m) : `${(c.seccoes || []).filter(s => s.titulo !== 'Plano de Ação').map(renderSection).join('')}
       ${m.todos.length ? `<section class="r-sec" aria-labelledby="pa-h"><h2 id="pa-h">Plano de Ação</h2>${tasks}</section>` : ''}`}
       ${pmoMeetingSection(m)}
-      ${coachingOn() ? participation(m) : ''}
-      ${radar ? `<section class="r-sec radar" aria-labelledby="rad-h"><h2 id="rad-h">Radar de Comunicação</h2>${myNumbers(m)}
-        ${c.radar?.correu_bem?.length ? `<h3>${icon('check')}<span>O que correu bem</span></h3><ul>${c.radar.correu_bem.map(i => `<li>${esc(curly(i))}</li>`).join('')}</ul>` : ''}
-        ${c.radar?.a_melhorar?.length ? `<h3>${icon('up')}<span>A melhorar</span></h3><ul>${c.radar.a_melhorar.map(i => `<li>${esc(curly(i))}</li>`).join('')}</ul>` : ''}
-        ${c.radar?.experimenta ? `<div class="tip"><strong>Experimenta na próxima:</strong> ${esc(curly(c.radar.experimenta))}</div>` : ''}</section>` : ''}
       ${m.turns.length ? `<section class="r-sec"><details class="transcript" id="transcript"><summary>${icon('chevron')}Transcrição completa <small>${plural(m.turns.length, 'intervenção', 'intervenções')}</small></summary>
         <div class="turns">${m.turns.map((t, i) => `<div class="turn" id="turn-${i}"><button type="button" class="time-btn" data-seek="${Math.round(t.start - t0)}" tabindex="-1">${clock(t.start - t0)}</button><div><div class="turn-who"><span class="key" style="--c:var(--sp${col[order[t.speaker]] ?? 6})"></span><span translate="no">${esc(personLabel(t.speaker))}</span></div><p>${esc(t.text)}</p></div></div>`).join('')}</div></details></section>` : ''}
     </div>
@@ -2045,7 +2070,7 @@ function viewSettings() {
         <p class="field-help" style="margin-top:var(--s-4)">Se usares o caderno em mais de um PC ou janela, as alterações são juntadas registo a registo: nada do que foi gravado noutro lado se perde.</p>
       </section>
       <section class="panel" aria-labelledby="set-coach"><div class="panel-head"><h2 id="set-coach">Coaching de comunicação</h2></div>
-        <label class="switch-row"><input type="checkbox" id="s-coaching" ${coachingOn() ? 'checked' : ''}><span><b>Mostrar o coaching de comunicação</b><br><span class="muted">Opcional. Junta à reunião o Radar sobre como tu falaste (ritmo, bordões, perguntas) e a vista Evolução. Nunca avalia as outras pessoas nem entra na saúde dos projetos.</span></span></label></section>
+        <label class="switch-row"><input type="checkbox" id="s-coaching" ${coachingOn() ? 'checked' : ''}><span><b>Mostrar o coaching de comunicação</b><br><span class="muted">Um botão <b>Coaching</b> em cada reunião abre, numa janela à parte, como tu falaste (tempo de fala, ritmo, bordões, perguntas), a comparação com a reunião anterior e uma sugestão para a próxima. Também mostra a vista Evolução. Nunca avalia as outras pessoas nem entra na saúde dos projetos.</span></span></label></section>
       <section class="panel" aria-labelledby="set-copy"><div class="panel-head"><h2 id="set-copy">Cópias de segurança</h2></div>
         <div class="actions"><button class="btn" type="button" data-action="export">Descarregar cópia</button><button class="btn" type="button" data-action="import">Importar cópia</button></div>
         <p class="field-help">A importação junta as reuniões da cópia às que já tens, sem duplicar.</p></section>
@@ -2086,7 +2111,7 @@ function viewHelp() {
     <ul><li><b>Tarefas</b> tem duas listas: <b>As minhas</b> e <b>À espera de outros</b>. Marca-as quando estiverem feitas: o caderno regista a data.</li>
       <li>Na reunião, <b>Copiar ata</b> copia a ata pronta para colar num email ou no Teams.</li>
       <li>Pesquisa com a caixa da barra lateral ou com <kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">K</kbd>: encontra reuniões, tarefas e decisões.</li>
-      <li>O coaching de comunicação é opcional: liga-o em <a class="btn-link" href="#/definicoes">Definições</a>.</li></ul>
+      <li>O coaching de comunicação abre no botão <b>Coaching</b> de cada reunião, sem misturar com o resumo. Podes desligá-lo em <a class="btn-link" href="#/definicoes">Definições</a>.</li></ul>
     <h2>Se algo não correr bem</h2>
     <ul><li><b>O Kilo Code não mostra /reuniao:</b> abre a pasta do caderno no VS Code e escreve <code>/reload</code>.</li>
       <li><b>Resposta não válida ou fraca:</b> no ecrã de revisão, clica em <b>Pedir outra resposta</b> e escreve outra vez <b>/reuniao</b>.</li>
@@ -2189,6 +2214,8 @@ document.addEventListener('click', async e => {
   const a = t.dataset.action, m = byId.get(current?.id);
   if (a === 'print') window.print();
   else if (a === 'cmdk') openCmdk();
+  else if (a === 'coach') openCoach();
+  else if (a === 'coach-close' || a === 'coach-close-nav') $('#coach').close();
   else if (a === 'copy-ata' && m) copyText(ataText(m), 'Ata copiada. Cola-a num email ou no Teams.');
   else if (a === 'delete' && m && !m.exemplo) {
     if (!confirm(`Apagar a reunião “${m.title}”? Não é possível desfazer.`)) return;
@@ -2248,7 +2275,7 @@ document.addEventListener('submit', async e => {
 });
 view.addEventListener('change', async e => {
   if (e.target.matches('[data-proj-assign]')) { const r = STATE.reunioes.find(x => x.id === e.target.dataset.projAssign); if (!r) return; touch(r); const pid = e.target.value; if (pid) { r.projeto = pid; const pp = projectById(pid); if (r.conteudo?.pmo && pp) { r.conteudo.pmo.projeto = pp.nome; assignCodes(pp, r.conteudo.pmo, meetings, r.id); } } else delete r.projeto; await persist(pid ? 'Reunião associada ao projeto.' : 'Reunião retirada do projeto.'); rebuild(); renderNav(); route(); return; }
-  if (e.target.id === 's-coaching') { STATE.coaching = e.target.checked; await persist(STATE.coaching ? 'Coaching ligado.' : 'Coaching desligado.'); renderNav(); return; }
+  if (e.target.id === 's-coaching') { STATE.coach = e.target.checked; await persist(STATE.coach ? 'Coaching ligado.' : 'Coaching desligado.'); renderNav(); return; }
   if (e.target.closest('form[data-form=review]')) { const it = e.target.closest('.rv-item'); if (it && e.target.name === 'keep') it.classList.toggle('off', !e.target.checked); return; }
   if (e.target.id === 'w-date') { if (isISO(e.target.value)) { W.date = e.target.value; W.copied = false; wizardAnalyse(); wizardParse(); rerenderWizard(); } return; }
   if (e.target.id === 'n-date' && NOTE) { NOTE.date = e.target.value; $('#note-preview').innerHTML = notePreview(); return; }
@@ -2317,7 +2344,7 @@ function cmdkRender() {
   const nav = [['#/nova', 'plus', 'Nova reunião'], ['#/', 'home', 'Início'], ['#/tarefas', 'tasks', 'Tarefas'], ['#/projetos', 'folder', 'Projetos'], ['#/nota', 'doc', 'Nota rápida'], ['#/pessoas', 'users', 'Pessoas'], ...(coachingOn() ? [['#/evolucao', 'chart', 'Evolução']] : []), ['#/ajuda', 'help', 'Como usar'], ['#/definicoes', 'gear', 'Definições']]
     .filter(([, , l]) => w.every(x => norm(l).includes(x))).map(([h, ic, l]) => ({ ic, title: l, run: () => go(h) }));
   const actions = [{ ic: THEME_ICON[theme], title: 'Mudar tema', key: 'tema escuro claro', run: cycleTheme }]
-    .concat(current?.id ? [{ ic: 'copy', title: 'Copiar ata desta reunião', key: 'copiar ata email', run: () => copyText(ataText(byId.get(current.id)), 'Ata copiada.') }, { ic: 'printer', title: 'Imprimir ou guardar em PDF', key: 'imprimir pdf', run: () => setTimeout(() => window.print(), 50) }] : [])
+    .concat(current?.id ? [{ ic: 'copy', title: 'Copiar ata desta reunião', key: 'copiar ata email', run: () => copyText(ataText(byId.get(current.id)), 'Ata copiada.') }, { ic: 'printer', title: 'Imprimir ou guardar em PDF', key: 'imprimir pdf', run: () => setTimeout(() => window.print(), 50) }, ...(coachingOn() ? [{ ic: 'mic', title: 'Coaching desta reunião', key: 'coaching radar comunicação', run: () => setTimeout(openCoach, 50) }] : [])] : [])
     .filter(a => w.every(x => norm(a.title + ' ' + a.key).includes(x)));
   const ms = meetings.filter(m => w.every(x => m.search.includes(x))).slice(0, w.length ? 12 : 6)
     .map(m => ({ ic: 'doc', html: markStr(m.title, re), snip: w.length ? snippet(m, w, 80) : `${fmtDate(m.date, 'short')}, ${esc(m.type)}`, run: () => go(meetingHref(m)) }));
@@ -2347,6 +2374,7 @@ cq.addEventListener('keydown', e => {
 clist.addEventListener('click', e => { const li = e.target.closest('.cmdk-item'); if (li) cmdkRun(+li.dataset.i); });
 clist.addEventListener('pointermove', e => { const li = e.target.closest('.cmdk-item'); if (li && +li.dataset.i !== csel) { csel = +li.dataset.i; cmdkMove(0); } });
 cmdk.addEventListener('click', e => { if (e.target === cmdk) cmdk.close(); });
+$('#coach').addEventListener('click', e => { if (e.target.id === 'coach') e.target.close(); });
 $('#cmdk-open').addEventListener('click', openCmdk);
 
 document.addEventListener('keydown', e => {
