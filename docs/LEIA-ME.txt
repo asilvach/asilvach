@@ -34,6 +34,13 @@ No caderno, "Nova reunião" > "nota rápida". Começa as linhas por D: (decisão
 T: (tarefa tua), E: Nome — ... (à espera de alguém), ? (pergunta), B: (bloqueio)
 ou R: (retomar).
 
+Preparar reuniões e o Outlook
+-----------------------------
+Na Agenda, planeia uma reunião ou traz as do Outlook (no Outlook: Ficheiro >
+Guardar como > iCalendar .ics, e põe o ficheiro na pasta "entrada"). O caderno
+junta o que está pendente com essas pessoas. "Abrir no Outlook" cria o
+compromisso com a agenda; "Lembrar" prepara um email de seguimento.
+
 Projetos (acompanhamento de PMO)
 --------------------------------
 Em "Projetos", cria um projeto (ex.: o nome do projeto e as pessoas com quem

@@ -225,7 +225,7 @@ const idb = (() => {
 })();
 const fixState = s => {
   const st = Object.assign(structuredClone(DEFAULT_STATE), s || {});
-  for (const k of ['fila', 'importados', 'projetos', 'reunioes', 'aliases']) if (!Array.isArray(st[k])) st[k] = [];
+  for (const k of ['fila', 'importados', 'projetos', 'reunioes', 'aliases', 'agenda']) if (!Array.isArray(st[k])) st[k] = [];
   if (!st.apagados || typeof st.apagados !== 'object') st.apagados = {};
   return st;
 };
@@ -241,12 +241,19 @@ function mergeState(local, other) {
   other = fixState(other);
   let vindos = 0;
   for (const [id, t] of Object.entries(other.apagados)) if (!local.apagados[id] || local.apagados[id] < t) local.apagados[id] = t;
+  const LISTS = ['decisoes', 'tarefas', 'pedidos', 'propostas', 'perguntas', 'bloqueios', 'retomar'];
   const mergeItems = (base, older) => {
-    for (const k of ['tarefas', 'pedidos']) {
-      const a = base.conteudo?.[k], b = older.conteudo?.[k];
-      if (!Array.isArray(a) || !Array.isArray(b)) continue;
-      a.forEach((it, i) => { const o = it.id && b.find(x => x.id === it.id); if (o && when(o) > when(it)) a[i] = o; });
-    }
+    const bc = base.conteudo, oc = older.conteudo; if (!bc || !oc) return base;
+    const where = c => { const m = new Map(); for (const k of LISTS) (c[k] || []).forEach((it, i) => { if (it.id) m.set(it.id, [k, i]); }); return m; };
+    const inBase = where(bc);
+    for (const k of LISTS) (oc[k] || []).forEach(o => {
+      if (!o.id || local.apagados[o.id]) return;
+      const pos = inBase.get(o.id);
+      if (!pos) { (bc[k] = bc[k] || []).push(o); return; } // item acrescentado do outro lado
+      const [bk, bi] = pos, it = bc[bk][bi];
+      if (when(o) > when(it)) { bc[bk].splice(bi, 1); (bc[k] = bc[k] || []).push(o); inBase.clear(); where(bc).forEach((v, key) => inBase.set(key, v)); }
+    });
+    for (const k of LISTS) if (Array.isArray(bc[k])) bc[k] = bc[k].filter(it => !it.id || !local.apagados[it.id]);
     return base;
   };
   const byId = new Map(local.reunioes.map((r, i) => [r.id, i]));
@@ -271,6 +278,11 @@ function mergeState(local, other) {
   local.importados = [...new Set([...local.importados, ...other.importados])].slice(-300);
   for (const j of other.fila) if (!local.fila.some(x => x.base === j.base)) local.fila.push(j);
   local.historicos = { ...(other.historicos || {}), ...(local.historicos || {}) };
+  local.atualizar = { ...(other.atualizar || {}), ...(local.atualizar || {}) };
+  local.contactos = { ...(other.contactos || {}), ...(local.contactos || {}) };
+  const ag = new Map(local.agenda.map((a, i) => [a.id, i]));
+  for (const a of other.agenda) { const i = ag.get(a.id); if (i == null) { local.agenda.push(a); vindos++; } else if (when(a) > when(local.agenda[i])) { local.agenda[i] = a; vindos++; } }
+  local.agenda = local.agenda.filter(a => !local.apagados[a.id]);
   return vindos;
 }
 async function loadState() {
@@ -335,7 +347,7 @@ async function persist(msg) {
 function afterRemoteChange() {
   rebuild(); renderList(); renderNav();
   const typing = /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName);
-  if (!typing && !['nova', 'rever', 'nota'].includes(current?.view)) route();
+  if (!typing && !['nova', 'rever', 'nota', 'plano', 'atualizar'].includes(current?.view)) route();
 }
 function renderSaveState() {
   const el = $('#save-state');
@@ -428,6 +440,7 @@ function recordFromJob(job, p) {
     oradores: names, falas: (job.turns || []).map(t => [+t.start.toFixed(2), +t.end.toFixed(2), order[t.speaker], t.text, +t.spoken.toFixed(2)]), conteudo: p, notas: '',
   };
   linkProject(rec);
+  const pl = planForMeeting(rec.data, names); if (pl) { rec.plano = pl.id; if (!rec.projeto && pl.projeto) rec.projeto = pl.projeto; }
   return rec;
 }
 function linkProject(rec) {
@@ -488,11 +501,22 @@ async function scanInbox() {
     const files = new Map();
     for await (const [name, h] of inbox.entries()) if (h.kind === 'file' && !/^(~\$|\.)/.test(name)) files.set(name, h);
     const bases = new Map();
-    for (const name of files.keys()) { const b = baseName(name); if (!bases.has(b)) bases.set(b, {}); const o = bases.get(b);
+    for (const name of files.keys()) { if (/\.ics$/i.test(name)) continue; const b = baseName(name); if (!bases.has(b)) bases.set(b, {}); const o = bases.get(b);
       if (/\.erro\.txt$/i.test(name)) o.erro = name; else if (/\.pedido\.md$/i.test(name)) o.pedido = name; else if (/\.resposta\.json$/i.test(name)) o.resposta = name; else if (TRANSCRIPT_RE.test(name)) o.transcricao = name; }
     const aguardar = [], quem = [], erros = [], rever = [];
     let imported = 0, changed = false;
+    // Reuniões do Outlook (.ics) deixadas na pasta: vão para a Agenda
+    for (const name of files.keys()) if (/\.ics$/i.test(name)) {
+      try { const r = importICS(await (await fileFromInbox(inbox, name)).text()); changed = true; await moveToDone(inbox, [name]); toast(`Agenda: ${plural(r.n, 'reunião nova', 'reuniões novas')} do Outlook.`); }
+      catch (err) { erros.push({ base: name, msg: `${name}: não consegui ler este ficheiro de calendário.` }); }
+    }
     for (const [b, o] of bases) {
+      if (!o.transcricao && /\.atualizar$/.test(b)) {
+        const rid = (STATE.atualizar || {})[b], m = rid && byId.get(rid);
+        if (o.resposta && m) { const rf = await fileFromInbox(inbox, o.resposta); if (Date.now() - rf.lastModified < 8000) aguardar.push({ base: b, ficheiro: `atualização de ${m.title}` }); else rever.push({ base: b, ficheiro: 'formato novo', titulo: `Atualizar: ${m.title}`, n: 0, href: `#/atualizar/${encodeURIComponent(rid)}` }); }
+        else if (o.pedido && m) aguardar.push({ base: b, ficheiro: `atualização de ${m.title}` });
+        continue;
+      }
       if (!o.transcricao && /\.historico$/.test(b)) {
         const pid = (STATE.historicos || {})[b], pp = pid && projectById(pid);
         if (o.resposta && pp) {
@@ -606,7 +630,8 @@ function isMe(name) {
   return (STATE.aliases || []).some(a => samePerson(a, name));
 }
 let meetings = [], byId = new Map(), allTodos = [];
-const usingExamples = () => !STATE.reunioes.length;
+const usingExamples = () => !STATE.reunioes.some(r => !r.avulsas);
+let AVULSAS = null; // reunião escondida com as tarefas avulsas
 function toMeeting(r) {
   const c = r.conteudo || {};
   const turns = (r.falas || []).map(f => ({ start: f[0], end: f[1], speaker: r.oradores[f[2]], text: f[3], spoken: f[4] ?? (f[1] - f[0]) }));
@@ -632,10 +657,18 @@ function toMeeting(r) {
   return m;
 }
 function rebuild() {
-  const recs = usingExamples() ? EXEMPLOS : STATE.reunioes;
+  const recs = usingExamples() ? EXEMPLOS : STATE.reunioes.filter(r => !r.avulsas);
   meetings = recs.map(toMeeting).sort((a, b) => (b.date || '').localeCompare(a.date || '') || (b.rec.criado_em || '').localeCompare(a.rec.criado_em || ''));
   byId = new Map(meetings.map(m => [m.id, m]));
-  allTodos = meetings.flatMap(m => m.todos);
+  const av = STATE.reunioes.find(r => r.avulsas);
+  AVULSAS = av ? Object.assign(toMeeting(av), { avulsas: true, title: 'Tarefa avulsa' }) : null;
+  allTodos = [...meetings.flatMap(m => m.todos), ...(AVULSAS ? AVULSAS.todos : [])];
+}
+// Registo das tarefas avulsas (criado na primeira tarefa sem reunião)
+function avulsasRec() {
+  let r = STATE.reunioes.find(x => x.avulsas);
+  if (!r) { r = { id: 'avulsas', avulsas: true, criado_em: stamp(), alterado_em: stamp(), data: '', tipo: 'Avulsas', oradores: [], falas: [], conteudo: { v: 2, titulo: 'Tarefas avulsas', tarefas: [], pedidos: [], decisoes: [], propostas: [], perguntas: [], bloqueios: [], retomar: [] } }; STATE.reunioes.push(r); }
+  return r;
 }
 const meOf = m => m.data?.oradores.find(o => o.eu || isMe(o.nome)) || null;
 const colorsOf = m => { let k = 1; return (m.data?.oradores || []).map(o => (o.eu || isMe(o.nome)) ? 0 : Math.min(6, k++)); };
@@ -722,7 +755,7 @@ ${ctx}
 
 TAREFAS EM ABERTO DE REUNIÕES ANTERIORES:
 ${pend}
-
+${(() => { const pl = !w.generic && w.date && planForMeeting(w.date, d ? d.oradores.map(o => o.nome) : []); return pl && pl.pontos?.length ? `\nAGENDA PREPARADA PARA ESTA REUNIÃO (${pl.titulo}):\n${pl.pontos.map((x, i) => `${i + 1}. ${x}`).join('\n')}\nPontos da agenda que não foram falados vão para "retomar", com "citacao": "" e "confirmar": "Não falado na reunião.".\n` : ''; })()}
 ${projectsPromptBlock(w.generic ? null : w.date)}
 REGRAS (lê com atenção: o caderno verifica cada citação na transcrição)
 - Nunca inventes responsável, prazo, conclusão nem decisão. Se algo não for claro, mantém o item e escreve em "confirmar" o motivo, numa frase curta. Nos outros casos "confirmar" fica "".
@@ -1107,12 +1140,13 @@ function renderBrand() { $('#brand-team').textContent = TEAM(); $('#brand-owner'
 function renderNav() {
   const open = allTodos.filter(t => !isDone(t)), mine = knowsMe() ? open.filter(mineTodo) : open;
   const late = mine.filter(t => t.due && t.due < TODAY).length;
-  const items = [['', 'home', 'Início', ''], ['tarefas', 'tasks', 'Tarefas', mine.length ? `<span class="count ${late ? 'late' : ''}">${nf(mine.length)}<span class="sr-only"> em aberto${late ? `, ${late} em atraso` : ''}</span></span>` : ''], ['projetos', 'folder', 'Projetos', projects().length ? `<span class="count">${nf(projects().length)}</span>` : ''], ['pessoas', 'users', 'Pessoas', ''], ...(coachingOn() ? [['evolucao', 'chart', 'Evolução', '']] : []), ['ajuda', 'help', 'Como usar', ''], ['definicoes', 'gear', 'Definições', '']];
+  const nextPlan = upcoming(7).length;
+  const items = [['', 'home', 'Início', ''], ['agenda', 'calendar', 'Agenda', nextPlan ? `<span class="count">${nf(nextPlan)}<span class="sr-only"> nos próximos 7 dias</span></span>` : ''], ['tarefas', 'tasks', 'Tarefas', mine.length ? `<span class="count ${late ? 'late' : ''}">${nf(mine.length)}<span class="sr-only"> em aberto${late ? `, ${late} em atraso` : ''}</span></span>` : ''], ['decisoes', 'check', 'Decisões', ''], ['projetos', 'folder', 'Projetos', projects().length ? `<span class="count">${nf(projects().length)}</span>` : ''], ['pessoas', 'users', 'Pessoas', ''], ...(coachingOn() ? [['evolucao', 'chart', 'Evolução', '']] : []), ['ajuda', 'help', 'Como usar', ''], ['definicoes', 'gear', 'Definições', '']];
   $('#nav').innerHTML = items.map(([h, ic, l, extra]) => `<a href="#/${h}" data-view="${h}">${icon(ic)}<span>${l}</span>${extra}</a>`).join('');
   markNav();
 }
 function markNav() {
-  const v = current?.view === 'p' ? 'projetos' : (current?.view ?? '');
+  const v = current?.view === 'p' ? 'projetos' : current?.view === 'plano' ? 'agenda' : (current?.view ?? '');
   $$('#nav a').forEach(a => a.dataset.view === v ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
   $$('#list .m-item').forEach(a => a.dataset.id === current?.id ? a.setAttribute('aria-current', 'page') : a.removeAttribute('aria-current'));
 }
@@ -1174,12 +1208,22 @@ function coachPanel(m) {
       <button class="icon-btn" type="button" data-action="coach-close" aria-label="Fechar">${icon('close')}</button></div>
     <div class="coach-body">
       ${c.radar?.experimenta ? `<div class="tip coach-focus"><strong>Experimenta na próxima:</strong> ${esc(curly(c.radar.experimenta))}</div>` : ''}
+      ${me ? coachGoal(m) : ''}
       ${me ? myNumbers(m) : `<p class="muted">Não sei qual és tu nesta reunião. Indica como apareces nas transcrições em <a class="btn-link" href="#/definicoes">Definições</a>.</p>`}
       ${c.radar?.correu_bem?.length ? `<h3>${icon('check')}<span>O que correu bem</span></h3><ul>${c.radar.correu_bem.map(i => `<li>${esc(curly(i))}</li>`).join('')}</ul>` : ''}
       ${c.radar?.a_melhorar?.length ? `<h3>${icon('up')}<span>A melhorar</span></h3><ul>${c.radar.a_melhorar.map(i => `<li>${esc(curly(i))}</li>`).join('')}</ul>` : ''}
       ${participation(m)}
     </div>
     <div class="coach-foot"><a class="btn" href="#/evolucao" data-action="coach-close-nav">${icon('chart')}Ver a tua evolução</a><button class="btn" type="button" data-action="coach-close">Fechar</button></div>`;
+}
+const GOALS = { '': 'Sem meta', bordoes_100: 'Menos bordões', hesitacoes_100: 'Menos hesitações', perguntas: 'Mais perguntas', maior_s: 'Monólogos mais curtos', pct: 'Tempo de fala equilibrado', ppm: 'Ritmo na zona ideal' };
+function coachGoal(m) {
+  const k = STATE.coach_meta || '', mt = METRICS.find(x => x.k === k);
+  const pts = k ? meetings.filter(x => meOf(x) && (x.date || '') <= (m.date || '')).slice(0, 8).reverse().map(x => ({ v: meOf(x)[k], date: x.date, title: x.title })) : [];
+  const first = pts[0], last = pts[pts.length - 1];
+  const verdict = pts.length >= 2 ? (() => { const d = last.v - first.v, better = mt.better === 'low' ? d < 0 : mt.better === 'high' ? d > 0 : status(k, last.v, { n: m.data.oradores.length }) === 'ok'; return Math.abs(d) < 0.01 ? 'Estável.' : `${better ? 'A melhorar' : 'A piorar'}: de ${mt.fmt(first.v)} para ${mt.fmt(last.v)} em ${plural(pts.length, 'reunião', 'reuniões')}.`; })() : '';
+  return `<section class="coach-goal"><div class="coach-goal-head"><label class="field-label" for="coach-meta">A tua meta</label><select class="text-input" id="coach-meta">${Object.entries(GOALS).map(([v, l]) => `<option value="${v}" ${v === k ? 'selected' : ''}>${l}</option>`).join('')}</select></div>
+    ${k && pts.length ? `<p class="coach-verdict">${esc(verdict || 'Ainda só há uma reunião com esta métrica.')}</p>${pts.length >= 2 ? lineChart(pts, { band: mt.band, fmt: mt.fmt, label: GOALS[k] }) : ''}` : k ? '' : '<p class="field-help">Escolhe uma meta para veres a evolução dela reunião a reunião.</p>'}</section>`;
 }
 function openCoach() {
   const m = byId.get(current?.id) || DEMO?.meetings.find(x => x.id === current?.id); if (!m) return;
@@ -1245,8 +1289,14 @@ const taskRow = t => {
   return `<div class="task ${done ? 'done' : ''}">
     <label><input type="checkbox" data-key="${esc(t.key)}" ${done ? 'checked' : ''}><span><span class="task-text">${esc(t.text)}</span></span></label>
     <span class="task-side">${t.t.confirmar ? `<span class="badge warn" title="${esc(t.t.confirmar)}">A confirmar</span>` : ''}${ownerBadge(t)}${dueBadge(t, done)}</span>
-    <a class="task-from" href="${meetingHref(t.m)}">${esc(t.m.title)}, ${fmtDate(t.m.date, 'short')}</a>${closedNote(t)}
+    ${t.m.avulsas ? `<span class="task-from">Tarefa avulsa</span>` : `<a class="task-from" href="${meetingHref(t.m)}">${esc(t.m.title)}, ${fmtDate(t.m.date, 'short')}</a>`}${closedNote(t)}${taskTools(t)}
   </div>`;
+};
+// Editar (todas, menos exemplos) e lembrar (o que está à espera de outra pessoa)
+const taskTools = t => {
+  if (t.m.exemplo) return '';
+  const pos = recById(t.m.rec.id) && (t.kind === 'pedido' ? ['pedidos', t.i] : ['tarefas', t.i]);
+  return `<span class="task-tools">${!isDone(t) && waitingTodo(t) && t.owner ? `<button type="button" class="btn-link" data-action="followup" data-key="${esc(t.key)}">Lembrar</button>` : ''}${pos ? `<button type="button" class="btn-link" data-action="edit-item" data-rec="${esc(t.m.rec.id)}" data-k="${pos[0]}" data-i="${pos[1]}">Editar</button>` : ''}</span>`;
 };
 
 /* ── Projetos: gráficos ── */
@@ -1510,7 +1560,7 @@ function folderPanel(full) {
   if (!aguardar.length && !quem.length && !erros.length && !rever.length) return conflitos + (full ? `<section class="panel" aria-labelledby="pasta-h"><div class="panel-head"><h2 id="pasta-h">Caixa de entrada vazia</h2><p>Pasta ${esc(dirHandle.name)}</p></div>
     <ol class="steps-list"><li>No Teams, transfere a transcrição (.vtt ou .docx) para a pasta <code>${esc(dirHandle.name)}\\${INBOX_DIR}</code>.</li><li>Este caderno prepara o pedido sozinho, em poucos segundos.</li><li>No Kilo Code, escreve <b>/reuniao</b> e envia.</li><li>Quando o Kilo Code terminar, revês o resultado e guardas.</li></ol></section>` : '');
   return conflitos + `<section class="panel" aria-labelledby="pasta-h" aria-live="polite"><div class="panel-head"><h2 id="pasta-h">Caixa de entrada</h2><p>Pasta ${esc(dirHandle.name)}\\${INBOX_DIR}</p></div>
-    ${rever.length ? `<div class="rows" style="margin-bottom:var(--s-4)">${rever.map(r => `<a class="row-link" href="#/rever/${encodeURIComponent(r.base)}"><div class="row-main"><div class="row-title">${esc(r.titulo)}</div><div class="row-sub"><span>Pronta a rever</span><span>${plural(r.n, 'item', 'itens')}</span><span>${esc(r.ficheiro)}</span></div></div><span class="btn">Rever</span></a>`).join('')}</div>` : ''}
+    ${rever.length ? `<div class="rows" style="margin-bottom:var(--s-4)">${rever.map(r => `<a class="row-link" href="${r.href || '#/rever/' + encodeURIComponent(r.base)}"><div class="row-main"><div class="row-title">${esc(r.titulo)}</div><div class="row-sub"><span>Pronta a rever</span>${r.n ? `<span>${plural(r.n, 'item', 'itens')}</span>` : ''}<span>${esc(r.ficheiro)}</span></div></div><span class="btn">Rever</span></a>`).join('')}</div>` : ''}
     ${quem.map(q => `<div class="step-head" style="margin:0 0 var(--s-4)"><span class="step-num">${icon('users')}</span><div style="min-width:0"><h2 style="font-size:var(--t-base)">Quem és tu em “${esc(q.ficheiro)}”?</h2>
       <div class="people-pick" style="margin-top:var(--s-2)">${q.speakers.map(sp => `<button type="button" class="chip" data-inbox-who="${esc(q.base)}" data-alias="${esc(sp)}" translate="no">${esc(displayName(sp))}</button>`).join('')}<button type="button" class="chip" data-inbox-who="${esc(q.base)}" data-alias="">Não participei</button></div></div></div>`).join('')}
     ${aguardar.length ? `<div class="status-line info" style="margin-top:0">${icon('clock')}<p><b>${plural(aguardar.length, 'transcrição pronta', 'transcrições prontas')} para o Kilo Code</b> (${esc(LF.format(aguardar.map(a => a.ficheiro)))}). No Kilo Code, escreve <b>/reuniao</b> e envia. A resposta aparece aqui para rever.</p></div>` : ''}
@@ -1557,7 +1607,8 @@ function viewHome() {
     <div class="rows">${ps.map(({ p, M }) => { const nx = M.marcos.find(x => !x.concluido); return `<a class="health-row" href="#/p/${encodeURIComponent(p.id)}"><div class="row-main" style="flex:1"><div class="row-title">${esc(p.nome)}</div><div class="row-sub">${nx ? `<span>${esc(nx.nome)}, ${fmtDate(nx.atual, 'short')}${nx.slip > 0 ? ` (+${nx.slip} d)` : ''}</span>` : ''}<span>${plural(M.alerts.length, 'alerta', 'alertas')}</span></div></div>${M.health ? `<span class="badge ${M.health}">${HEALTH_LABEL[M.health]}</span>` : ''}</a>`; }).join('')}</div></section>` : '';
   return `<div class="page wide">
     <div class="page-head" style="margin-bottom:var(--s-8)"><div><h1 tabindex="-1" class="home-h1">A tua semana</h1>
-      ${last ? `<p class="home-lead">${homeSentence(mine, late)}</p>` : ''}<p class="page-sub" style="font-size:var(--t-sm);color:var(--ink-3)">${who}, ${fmtDate(TODAY, 'weekday')}</p></div></div>
+      ${last ? `<p class="home-lead">${homeSentence(mine, late)}</p>` : ''}<p class="page-sub" style="font-size:var(--t-sm);color:var(--ink-3)">${who}, ${fmtDate(TODAY, 'weekday')}</p></div>
+      ${last ? `<div class="actions"><a class="btn" href="#/semana">${icon('chart')}Revisão da semana</a></div>` : ''}</div>
     <div class="stack">
       ${!OWNER() ? welcomePanel() : ''}
       ${usingExamples() ? `<div class="callout">${icon('info')}<p>Estas são <b>reuniões de exemplo</b>, para veres como fica. Desaparecem quando a primeira reunião tua entrar no caderno.</p></div>` : ''}
@@ -1576,6 +1627,9 @@ function viewHome() {
         <p style="margin:var(--s-4) 0 0"><a class="btn-link" href="${meetingHref(last)}">Abrir a reunião</a></p>
       </section>
       ${toConfirm ? `<div class="status-line warn" style="margin:0">${icon('alert')}<p>${plural(toConfirm, 'item das tuas reuniões está', 'itens das tuas reuniões estão')} por confirmar. Aparecem marcados “A confirmar” nas reuniões e nas tarefas.</p></div>` : ''}
+      ${(() => { const up = upcoming(7); return `<section class="panel" aria-labelledby="up-h"><div class="panel-head"><h2 id="up-h">Próximas reuniões</h2><a class="btn-link" href="#/agenda">Agenda</a></div>
+        ${up.length ? `<div class="rows">${up.slice(0, 4).map(a => { const b = briefingFor(a.pessoas, a.projeto), n = b.devo.length + b.devem.length + b.abertos.length; return `<a class="row-link" href="#/plano/${encodeURIComponent(a.id)}"><div class="row-main"><div class="row-title">${esc(a.titulo)}</div><div class="row-sub"><span>${esc(planWhen(a))}</span>${n ? `<span>${plural(n, 'pendente para levar', 'pendentes para levar')}</span>` : ''}</div></div><span class="btn">${a.pontos?.length ? 'Ver agenda' : 'Preparar'}</span></a>`; }).join('')}</div>`
+          : `<p class="muted" style="margin:0">Nenhuma reunião planeada para os próximos 7 dias. <a class="btn-link" href="#/plano/novo">Planear uma</a> ou traz as do Outlook na <a class="btn-link" href="#/agenda">Agenda</a>.</p>`}</section>`; })()}
       <div class="cols-2">
         <section class="panel" aria-labelledby="next-h"><div class="panel-head"><h2 id="next-h">${knowsMe() ? 'As tuas tarefas' : 'Tarefas em aberto'}</h2><a class="btn-link" href="#/tarefas" data-f-go="who:mine">Ver todas</a></div>
           ${next.length ? `<div>${next.map(taskRow).join('')}</div>` : '<p class="muted">Nada pendente.</p>'}</section>
@@ -1688,12 +1742,12 @@ function parseQuickNote(text, date) {
     const l = raw.trim().replace(/^[-•*]\s+/, ''); if (!l) continue;
     const hit = NOTE_PREFIX.find(([re]) => re.test(l));
     if (!hit) { livre.push(l); continue; }
-    const k = hit[1], body = l.replace(hit[0], '').trim(); if (!body) continue;
+    const k = hit[1], body = cap(l.replace(hit[0], '').trim()); if (!body) continue;
     const base = { minuto: '', citacao: '', ev: 'nota', confirmar: '' };
     if (k === 'tarefas') { const d = noteDue(body, date); c.tarefas.push({ ...base, acao: d.text, responsavel: 'Eu', prazo: d.prazo, prazo_dito: d.prazo_dito, feito: false }); }
     else if (k === 'pedidos') {
       const d = noteDue(body, date), sp = d.text.match(/^(.+?)\s+(?:—|–|-)\s+(.+)$/) || d.text.match(/^([^:]{2,40}):\s*(.+)$/);
-      const it = { ...base, acao: sp ? sp[2].trim() : d.text, para: sp ? sp[1].trim() : '', quem: 'Eu', prazo: d.prazo, prazo_dito: d.prazo_dito, feito: false };
+      const it = { ...base, acao: cap(sp ? sp[2].trim() : d.text), para: sp ? sp[1].trim() : '', quem: 'Eu', prazo: d.prazo, prazo_dito: d.prazo_dito, feito: false };
       if (!it.para) it.confirmar = 'Diz de quem estás à espera: “E: Nome — o quê”.';
       c.pedidos.push(it);
     } else c[k].push({ ...base, texto: body, quem: '' });
@@ -1738,15 +1792,410 @@ async function saveNote(f) {
   await persist('Nota guardada.'); rebuild(); renderList(); renderNav(); go(meetingHref({ id: rec.id }));
 }
 
+/* ════════════════ Outlook (sem rede): ficheiros de calendário e email ════════════════
+   Do caderno para o Outlook: .ics (abre como compromisso, com a agenda) e mailto: (abre um email novo).
+   Do Outlook para o caderno: um .ics guardado no Outlook (uma reunião ou o calendário), escolhido aqui ou
+   deixado na pasta entrada. */
+const icsEsc = s => String(s ?? '').replace(/\\/g, '\\\\').replace(/;/g, '\;').replace(/,/g, '\\,').replace(/\r?\n/g, '\\n');
+// Linhas de no máximo 75 bytes (os acentos ocupam mais de um), continuadas com um espaço
+const icsFold = line => { const enc = new TextEncoder(), out = []; let cur = '', n = 0; for (const ch of line) { const b = enc.encode(ch).length; if (n + b > (out.length ? 74 : 75)) { out.push(cur); cur = ''; n = 0; } cur += ch; n += b; } out.push(cur); return out.join('\r\n '); };
+const icsStamp = () => new Date().toISOString().replace(/[-:]/g, '').replace(/\.\d+/, '');
+const icsDate = iso => iso.replace(/-/g, '');
+function icsFile(events) {
+  const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//CIO Office Portugal//Caderno de Reunioes//PT', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH'];
+  for (const e of events) {
+    L.push('BEGIN:VEVENT', `UID:${e.uid}@caderno-reunioes`, `DTSTAMP:${icsStamp()}`);
+    if (e.hora) { const [h, mi] = e.hora.split(':').map(Number), end = new Date(`${e.data}T${e.hora}:00`); end.setMinutes(end.getMinutes() + (e.duracao || 30));
+      L.push(`DTSTART:${icsDate(e.data)}T${pad(h)}${pad(mi)}00`, `DTEND:${icsDate(localISO(end))}T${pad(end.getHours())}${pad(end.getMinutes())}00`); }
+    else L.push(`DTSTART;VALUE=DATE:${icsDate(e.data)}`, `DTEND;VALUE=DATE:${icsDate(addDays(e.data, 1))}`, 'TRANSP:TRANSPARENT');
+    L.push(`SUMMARY:${icsEsc(e.titulo)}`);
+    if (e.descricao) L.push(`DESCRIPTION:${icsEsc(e.descricao)}`);
+    for (const a of e.participantes || []) if (a.email) L.push(`ATTENDEE;CN="${String(a.nome).replace(/"/g, '')}";ROLE=REQ-PARTICIPANT:mailto:${a.email}`);
+    if (e.alarme) L.push('BEGIN:VALARM', 'ACTION:DISPLAY', `DESCRIPTION:${icsEsc(e.titulo)}`, `TRIGGER:${e.alarme}`, 'END:VALARM');
+    L.push('END:VEVENT');
+  }
+  L.push('END:VCALENDAR');
+  return L.map(icsFold).join('\r\n') + '\r\n';
+}
+function download(name, text, type) {
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([text], { type })); a.download = name;
+  document.body.append(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+}
+const mailtoHref = (to, subject, body) => `mailto:${(to || []).map(encodeURIComponent).join(';')}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(body).slice(0, 1800)}`;
+/* Lê um .ics do Outlook: só o essencial (título, início, fim, participantes, local) */
+function parseICS(text) {
+  const lines = String(text || '').replace(/\r\n[ \t]/g, '').replace(/\n[ \t]/g, '').split(/\r?\n/);
+  const out = []; let ev = null;
+  const unesc = s => s.replace(/\\n/gi, '\n').replace(/\\([,;\\])/g, '$1');
+  const when = (params, v) => {
+    const m = v.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2})(\d{2})(Z)?)?$/); if (!m) return null;
+    if (!m[4]) return { data: `${m[1]}-${m[2]}-${m[3]}`, hora: '' };
+    if (m[7]) { const d = new Date(Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5])); return { data: localISO(d), hora: `${pad(d.getHours())}:${pad(d.getMinutes())}` }; }
+    return { data: `${m[1]}-${m[2]}-${m[3]}`, hora: `${m[4]}:${m[5]}` };
+  };
+  for (const raw of lines) {
+    if (raw === 'BEGIN:VEVENT') { ev = { participantes: [] }; continue; }
+    if (raw === 'END:VEVENT') { if (ev && ev.inicio) out.push(ev); ev = null; continue; }
+    if (!ev) continue;
+    const i = raw.indexOf(':'); if (i < 0) continue;
+    const head = raw.slice(0, i), v = raw.slice(i + 1), [name, ...params] = head.split(';');
+    const cn = (params.find(p => /^CN=/i.test(p)) || '').replace(/^CN=/i, '').replace(/^"|"$/g, '');
+    if (name === 'SUMMARY') ev.titulo = unesc(v);
+    else if (name === 'UID') ev.uid = v;
+    else if (name === 'LOCATION') ev.local = unesc(v);
+    else if (name === 'DTSTART') ev.inicio = when(params, v);
+    else if (name === 'DTEND') ev.fim = when(params, v);
+    else if (name === 'ATTENDEE' || name === 'ORGANIZER') { const email = v.replace(/^mailto:/i, ''); const nome = cn || email; if (nome && !ev.participantes.some(p => p.nome === nome)) ev.participantes.push({ nome, email: /@/.test(email) ? email : '' }); }
+    else if (name === 'STATUS' && /CANCELLED/i.test(v)) ev.cancelada = true;
+  }
+  return out.filter(e => !e.cancelada);
+}
+/* Junta as reuniões de um .ics à agenda (sem duplicar) e aprende os emails das pessoas */
+function importICS(text) {
+  const evs = parseICS(text); let n = 0;
+  STATE.agenda = STATE.agenda || []; STATE.contactos = STATE.contactos || {};
+  for (const e of evs) {
+    for (const p of e.participantes) if (p.email) STATE.contactos[norm(displayName(p.nome))] = p.email;
+    if (!e.inicio || e.inicio.data < addDays(TODAY, -1)) continue;
+    const uid = `${e.uid || slug(e.titulo || '')}|${e.inicio.data}`;
+    const dur = e.fim && e.inicio.hora && e.fim.hora ? Math.max(15, Math.round((new Date(`${e.fim.data}T${e.fim.hora}`) - new Date(`${e.inicio.data}T${e.inicio.hora}`)) / 60000)) : 30;
+    const pessoas = e.participantes.map(p => displayName(p.nome)).filter(nm => !isMe(nm) && !(OWNER() && samePerson(nm, OWNER())));
+    const ex = STATE.agenda.find(a => a.uid === uid);
+    if (ex) { Object.assign(ex, { titulo: e.titulo || ex.titulo, data: e.inicio.data, hora: e.inicio.hora, duracao: dur, local: e.local || ex.local || '' }); touch(ex); continue; }
+    STATE.agenda.push({ id: 'ag-' + uid.length.toString(36) + uid.split('').reduce((h, c) => (h * 31 + c.charCodeAt(0)) >>> 0, 7).toString(36), uid, titulo: e.titulo || 'Reunião', data: e.inicio.data, hora: e.inicio.hora, duracao: dur, local: e.local || '', pessoas, projeto: '', objetivo: '', pontos: [], notas: '', origem: 'outlook', criado_em: stamp(), alterado_em: stamp() });
+    n++;
+  }
+  return { n, total: evs.length };
+}
+const emailOf = nome => (STATE.contactos || {})[norm(displayName(nome))] || '';
+
+/* ════════════════ Agenda: preparar as próximas reuniões ════════════════ */
+const agenda = () => (STATE.agenda || []).filter(a => !(STATE.apagados || {})[a.id]);
+const planById = id => agenda().find(a => a.id === id);
+const upcoming = (days = 60) => agenda().filter(a => a.data >= TODAY && a.data <= addDays(TODAY, days)).sort((a, b) => (a.data + (a.hora || '99')).localeCompare(b.data + (b.hora || '99')));
+const planWhen = a => `${fmtDate(a.data, 'weekday')}${a.hora ? `, ${a.hora}` : ''}${a.duracao && a.hora ? ` (${a.duracao} min)` : ''}`;
+// Reunião do caderno que corresponde a uma reunião planeada (mesmo dia e pessoas em comum, ou ligada na revisão)
+const meetingOfPlan = a => meetings.find(m => m.rec.plano === a.id) || meetings.find(m => m.date === a.data && (a.pessoas || []).some(p => m.people.some(x => samePerson(x, p))));
+const planForMeeting = (date, people) => agenda().find(a => a.data === date && (a.pessoas || []).some(p => people.some(x => samePerson(x, p))));
+/* O que está pendente com estas pessoas (ou neste projeto): é o que se leva para a reunião */
+function briefingFor(pessoas, projeto) {
+  const ps = (pessoas || []).filter(Boolean);
+  const withThem = m => (projeto && m.rec.projeto === projeto) || m.people.some(x => !isMe(x) && ps.some(p => samePerson(x, p)));
+  const ms = meetings.filter(m => !m.exemplo || usingExamples()).filter(withThem).slice(0, 8);
+  const open = allTodos.filter(t => !isDone(t));
+  const devo = open.filter(t => mineTodo(t) && ms.includes(t.m));
+  const devem = open.filter(t => waitingTodo(t) && (ps.some(p => t.owner && samePerson(t.owner, p)) || (ms.includes(t.m) && t.owner && !isMe(t.owner))));
+  const pick = (k, n) => ms.slice(0, n).flatMap(m => (m.c.v === 2 ? m.c[k] || [] : []).map(it => ({ it, m })));
+  const decisoes = [...ms.slice(0, 3).flatMap(m => (m.c.v === 2 ? (m.c.decisoes || []).map(it => ({ it, m })) : (m.c.seccoes || []).filter(s => s.tipo === 'decisoes').flatMap(s => s.itens.map(t => ({ it: { texto: t }, m })))))];
+  const abertos = [...pick('perguntas', 2), ...pick('retomar', 2), ...pick('propostas', 2), ...pick('bloqueios', 2)];
+  return { ms, devo, devem, decisoes, abertos };
+}
+function agendaText(a) {
+  const L = [a.titulo, planWhen(a)];
+  if (a.pessoas?.length) L.push(`Participantes: ${LF.format(a.pessoas)}`);
+  if (a.objetivo) L.push('', 'Objetivo', a.objetivo);
+  if (a.pontos?.length) { L.push('', 'Agenda'); a.pontos.forEach((p, i) => L.push(`${i + 1}. ${p}`)); }
+  return L.join('\n');
+}
+function planICS(a) {
+  return icsFile([{ uid: a.id, titulo: a.titulo, data: a.data, hora: a.hora || '', duracao: a.duracao || 30, descricao: [a.objetivo ? 'Objetivo: ' + a.objetivo : '', ...(a.pontos || []).map((p, i) => `${i + 1}. ${p}`)].filter(Boolean).join('\n'), participantes: (a.pessoas || []).map(nome => ({ nome, email: emailOf(nome) })), alarme: '-PT15M' }]);
+}
+function viewAgenda() {
+  const up = upcoming(36500), past = agenda().filter(a => a.data < TODAY).sort((a, b) => b.data.localeCompare(a.data)).slice(0, 10);
+  const row = a => { const m = meetingOfPlan(a), b = briefingFor(a.pessoas, a.projeto); const pend = b.devo.length + b.devem.length + b.abertos.length;
+    return `<a class="row-link" href="#/plano/${encodeURIComponent(a.id)}"><div class="row-main"><div class="row-title">${esc(a.titulo)}</div><div class="row-sub"><span>${esc(planWhen(a))}</span>${a.pessoas?.length ? `<span translate="no">${esc(LF.format(a.pessoas.slice(0, 3)))}${a.pessoas.length > 3 ? ` e mais ${a.pessoas.length - 3}` : ''}</span>` : ''}</div></div>${m ? '<span class="badge ok">Ata guardada</span>' : a.pontos?.length ? `<span class="badge me">Agenda com ${plural(a.pontos.length, 'ponto', 'pontos')}</span>` : pend ? `<span class="badge warn">${plural(pend, 'pendente', 'pendentes')}</span>` : '<span class="badge">Por preparar</span>'}</a>`; };
+  return `<div class="page">
+    <div class="page-head"><div><h1 tabindex="-1">Agenda</h1><p class="page-sub">As próximas reuniões, preparadas com o que está pendente com cada pessoa. A agenda vai para o Outlook com um clique.</p></div>
+      <div class="actions"><a class="btn primary" href="#/plano/novo">${icon('plus')}Planear reunião</a></div></div>
+    <div class="stack">
+      <section class="panel" aria-labelledby="ag-up"><div class="panel-head"><h2 id="ag-up">Próximas</h2><p>${plural(up.length, 'reunião', 'reuniões')}</p></div>
+        ${up.length ? `<div class="rows">${up.map(row).join('')}</div>` : `<p class="muted" style="margin:0">Ainda sem reuniões planeadas. Cria uma ou traz as do Outlook.</p>`}</section>
+      <section class="panel" aria-labelledby="ag-ol"><div class="panel-head"><h2 id="ag-ol">Trazer do Outlook</h2></div>
+        <ol class="steps-list"><li>No Outlook, abre a reunião (ou o calendário) e escolhe <b>Ficheiro</b>, <b>Guardar como</b> (ou <b>Guardar calendário</b>), formato <b>iCalendar (.ics)</b>.</li>
+          <li>${dirHandle ? `Guarda o ficheiro na pasta <code>${INBOX_DIR}</code>: aparece aqui sozinho.` : 'Escolhe o ficheiro aqui:'}</li></ol>
+        <div class="actions"><button class="btn" type="button" data-action="ics-import">${icon('upload')}Escolher ficheiro .ics</button></div>
+        <p class="field-help">O caderno guarda só o título, a hora, o local e os participantes. Os emails servem para preencher os convites e os lembretes.</p></section>
+      ${past.length ? `<section class="panel" aria-labelledby="ag-past"><div class="panel-head"><h2 id="ag-past">Passadas</h2></div><div class="rows">${past.map(row).join('')}</div></section>` : ''}
+    </div></div>`;
+}
+let PLAN = null; // rascunho da reunião planeada em edição
+function viewPlan(id) {
+  if (id === 'novo') { const q = new URLSearchParams(location.hash.split('?')[1] || ''); PLAN = { id: 'ag-' + uid(), titulo: q.get('titulo') || '', data: q.get('data') || addDays(TODAY, 1), hora: '', duracao: 30, local: '', pessoas: (q.get('pessoas') || '').split(';').filter(Boolean), projeto: q.get('projeto') || '', objetivo: '', pontos: [], notas: '', origem: 'caderno', novo: true }; }
+  else if (!(id === 'atual' && PLAN)) { const a = planById(id); if (!a) return `<div class="page"><h1 tabindex="-1">Reunião não encontrada</h1><p><a class="btn-link" href="#/agenda">Voltar à agenda</a></p></div>`; if (!PLAN || PLAN.id !== id) PLAN = structuredClone(a); }
+  const a = PLAN, b = briefingFor(a.pessoas, a.projeto), m = a.novo ? null : meetingOfPlan(a);
+  const add = (txt, label = 'Pôr na agenda') => `<button type="button" class="btn-link add-point" data-action="plan-add" data-text="${esc(txt)}" title="${label}">${icon('plus')}<span class="sr-only">${label}</span></button>`;
+  const line = (txt, sub, extra = '') => `<div class="brief-row"><div class="row-main"><div>${esc(txt)}</div>${sub ? `<div class="row-sub">${sub}</div>` : ''}</div>${extra}${add(txt)}</div>`;
+  const fromM = x => `<span>${esc(x.m.title)}, ${fmtDate(x.m.date, 'short')}</span>`;
+  const sec = (title, arr, empty) => `<section class="brief-sec"><h3>${title}${arr.length ? ` <span class="count">${nf(arr.length)}</span>` : ''}</h3>${arr.length ? arr.join('') : `<p class="muted">${empty}</p>`}</section>`;
+  const projs = projects();
+  return `<div class="page wide">
+    <nav class="crumbs" aria-label="Caminho"><a href="#/agenda">Agenda</a><span aria-hidden="true">/</span><span>${a.novo ? 'Planear reunião' : esc(a.titulo)}</span></nav>
+    <div class="page-head"><div><h1 tabindex="-1">${a.novo ? 'Planear reunião' : esc(a.titulo)}</h1><p class="page-sub">${a.novo ? 'Diz quando e com quem. O caderno junta o que está pendente com essas pessoas para levares à reunião.' : esc(planWhen(a))}</p></div>
+      ${m ? `<div class="actions"><a class="btn" href="${meetingHref(m)}">${icon('doc')}Ver a ata</a></div>` : ''}</div>
+    <div class="plan-grid">
+      <form class="stack plan-form" data-form="plan" style="gap:var(--s-4)">
+        <div><label class="field-label" for="pl-titulo">Título</label><input class="text-input" id="pl-titulo" name="titulo" value="${esc(a.titulo)}" placeholder="Ex.: Ponto semanal com o fornecedor…" required></div>
+        <div class="form-grid three"><div><label class="field-label" for="pl-data">Data</label><input class="text-input" type="date" id="pl-data" name="data" value="${esc(a.data)}" required></div>
+          <div><label class="field-label" for="pl-hora">Hora</label><input class="text-input" type="time" id="pl-hora" name="hora" value="${esc(a.hora || '')}"></div>
+          <div><label class="field-label" for="pl-dur">Duração (min)</label><input class="text-input" type="number" min="5" step="5" id="pl-dur" name="duracao" value="${esc(a.duracao || 30)}"></div></div>
+        <div><label class="field-label" for="pl-pessoas">Com quem</label><input class="text-input" id="pl-pessoas" name="pessoas" value="${esc((a.pessoas || []).join('; '))}" placeholder="Ex.: Pedro Alves; Ana Costa" translate="no"><p class="field-help">Separa com ponto e vírgula. O resumo ao lado atualiza-se.</p></div>
+        ${projs.length ? `<div><label class="field-label" for="pl-proj">Projeto</label><select class="text-input" id="pl-proj" name="projeto"><option value="">Nenhum</option>${projs.map(p => `<option value="${esc(p.id)}" ${a.projeto === p.id ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}</select></div>` : ''}
+        <div><label class="field-label" for="pl-obj">Objetivo</label><input class="text-input" id="pl-obj" name="objetivo" value="${esc(a.objetivo || '')}" placeholder="O que tem de sair desta reunião?"></div>
+        <div><label class="field-label" for="pl-pontos">Agenda</label><textarea class="text-area" id="pl-pontos" name="pontos" rows="7" placeholder="Um ponto por linha. Usa o + ao lado para trazer pendentes.">${esc((a.pontos || []).join('\n'))}</textarea></div>
+        <div><label class="field-label" for="pl-notas">Notas só para ti</label><textarea class="text-area" id="pl-notas" name="notas" rows="3" placeholder="Não vão para o convite.">${esc(a.notas || '')}</textarea></div>
+        <div class="actions"><button class="btn primary" type="submit">${icon('save')}Guardar</button>
+          <button class="btn" type="button" data-action="plan-ics">${icon('calendar')}Abrir no Outlook</button>
+          <button class="btn" type="button" data-action="plan-mail">${icon('doc')}Enviar a agenda por email</button>
+          <button class="btn" type="button" data-action="plan-copy">${icon('copy')}Copiar agenda</button>
+          ${a.novo ? '' : `<button class="icon-btn" type="button" data-action="plan-delete" aria-label="Apagar esta reunião planeada" title="Apagar">${icon('trash')}</button>`}</div>
+        <p class="field-help">“Abrir no Outlook” descarrega um ficheiro de calendário: abre-o e o Outlook cria o compromisso com a agenda e um lembrete 15 minutos antes. Para convidar, usa “Convidar participantes”.</p>
+      </form>
+      <aside class="brief" aria-labelledby="br-h"><h2 id="br-h">Para levar</h2>
+        <p class="sec-sub">${b.ms.length ? `Das ${plural(b.ms.length, 'reunião', 'reuniões')} anteriores com ${a.pessoas?.length ? 'estas pessoas' : 'este projeto'}.` : 'Indica com quem é a reunião para ver o que está pendente.'}</p>
+        ${b.ms.length ? `
+        ${sec('O que me devem', b.devem.map(t => line(t.text, `<span translate="no">${esc(personLabel(t.owner))}</span>${t.due ? `<span class="${t.due < TODAY ? 'late' : ''}">prazo ${fmtDate(t.due, 'short')}</span>` : ''}${fromM(t)}`)), 'Nada à espera destas pessoas.')}
+        ${sec('O que eu devo', b.devo.map(t => line(t.text, `${t.due ? `<span class="${t.due < TODAY ? 'late' : ''}">prazo ${fmtDate(t.due, 'short')}</span>` : ''}${fromM(t)}`)), 'Nada pendente do teu lado.')}
+        ${sec('Em aberto', b.abertos.map(x => line(x.it.texto, `<span>${esc(x.m.c.perguntas?.includes(x.it) ? 'Pergunta' : x.m.c.bloqueios?.includes(x.it) ? 'Bloqueio' : x.m.c.propostas?.includes(x.it) ? 'Proposta' : 'Retomar')}</span>${fromM(x)}`)), 'Nenhum assunto em aberto.')}
+        ${sec('Decisões recentes', b.decisoes.map(x => line(x.it.texto, fromM(x))), 'Nenhuma decisão registada.')}
+        <button type="button" class="btn" data-action="plan-add-all">${icon('plus')}Pôr todos os pendentes na agenda</button>` : ''}
+      </aside>
+    </div></div>`;
+}
+function readPlanForm(f) {
+  Object.assign(PLAN, { titulo: f.titulo.value.trim(), data: f.data.value, hora: f.hora.value, duracao: +f.duracao.value || 30, pessoas: f.pessoas.value.split(';').map(x => x.trim()).filter(Boolean), projeto: f.projeto ? f.projeto.value : PLAN.projeto, objetivo: f.objetivo.value.trim(), pontos: f.pontos.value.split('\n').map(x => x.trim()).filter(Boolean), notas: f.notas.value });
+}
+async function savePlan(silent) {
+  const f = $('form[data-form=plan]'); if (f) readPlanForm(f);
+  if (!PLAN.titulo || !isISO(PLAN.data)) { toast('Indica o título e a data.'); return false; }
+  STATE.agenda = STATE.agenda || [];
+  const { novo, ...p } = PLAN; touch(p); if (novo) p.criado_em = stamp();
+  const i = STATE.agenda.findIndex(x => x.id === p.id); if (i < 0) STATE.agenda.push(p); else STATE.agenda[i] = p;
+  PLAN = structuredClone(p);
+  await persist(silent ? '' : 'Reunião planeada guardada.');
+  if (novo) { history.replaceState(null, '', '#/plano/' + encodeURIComponent(p.id)); }
+  return true;
+}
+
+/* ════════════════ Janela genérica: editar, acrescentar, lembrar ════════════════ */
+const dlg = () => $('#dlg');
+function openDlg(title, body) { const d = dlg(); d.innerHTML = `<div class="coach-head"><div><h2 id="dlg-h">${title}</h2></div><button class="icon-btn" type="button" data-action="dlg-close" aria-label="Fechar">${icon('close')}</button></div><div class="coach-body">${body}</div>`; d.showModal(); d.querySelector('input:not([type=hidden]),textarea,select')?.focus(); }
+const recById = id => STATE.reunioes.find(r => r.id === id);
+const findItem = (rec, id) => { for (const [k] of ITEM_KINDS) { const i = (rec.conteudo?.[k] || []).findIndex(x => x.id === id); if (i >= 0) return [k, i]; } return null; };
+// Garante que um item (incluindo de reuniões antigas) tem id próprio
+function ensureId(rec, k, i) { const it = rec.conteudo[k][i]; if (!it.id) { it.id = uid(); touch(rec); } return it.id; }
+function itemForm(rec, k, it) {
+  const isLegacy = rec.conteudo?.v !== 2;
+  const person = it.responsavel ?? it.para ?? it.quem ?? '';
+  return `<form class="stack" data-form="item" data-rec="${esc(rec.id)}" data-item="${esc(it.id || '')}" data-from="${k}" style="gap:var(--s-4)">
+    <div class="form-grid"><div><label class="field-label" for="it-k">Tipo</label><select class="text-input" id="it-k" name="kind" ${isLegacy ? 'disabled' : ''}>${ITEM_KINDS.map(([kk, one]) => `<option value="${kk}" ${kk === k ? 'selected' : ''}>${one}</option>`).join('')}</select></div>
+      <div><label class="field-label" for="it-p">${k === 'pedidos' ? 'A quem' : k === 'tarefas' ? 'Responsável' : 'Quem'}</label><input class="text-input" id="it-p" name="pessoa" value="${esc(person)}" placeholder="Ex.: Eu, Ana Costa…" translate="no"></div></div>
+    <div><label class="field-label" for="it-t">Texto</label><input class="text-input" id="it-t" name="texto" value="${esc(itemText(it))}" required></div>
+    <div class="form-grid"><div><label class="field-label" for="it-d">Prazo</label><input class="text-input" type="date" id="it-d" name="prazo" value="${esc(it.prazo || '')}"><p class="field-help">Só para tarefas e pedidos.</p></div>
+      ${it.confirmar ? `<div><span class="field-label">A confirmar</span><label class="rv-ok"><input type="checkbox" name="ok"> ${esc(it.confirmar)} Está certo.</label></div>` : ''}</div>
+    ${quoteHTML(it)}
+    <div class="actions"><button class="btn primary" type="submit">${icon('save')}Guardar</button><button class="btn" type="button" data-action="dlg-close">Cancelar</button>
+      <button class="btn danger" type="button" data-action="item-delete" style="margin-left:auto">${icon('trash')}Apagar</button></div>
+  </form>`;
+}
+function openEdit(recId, k, i) {
+  const rec = recById(recId); if (!rec) { toast('As reuniões de exemplo não podem ser editadas.'); return; }
+  ensureId(rec, k, i);
+  openDlg('Editar', itemForm(rec, k, rec.conteudo[k][i]));
+}
+async function saveItemForm(f) {
+  const rec = recById(f.dataset.rec); if (!rec) return;
+  const pos = findItem(rec, f.dataset.item); if (!pos) return;
+  const [from, i] = pos, it = rec.conteudo[from][i], kind = f.kind.disabled ? from : f.kind.value;
+  const texto = f.texto.value.trim(), pessoa = f.pessoa.value.trim(), prazo = isISO(f.prazo.value) ? f.prazo.value : null;
+  if (!texto) return;
+  const o = { ...it };
+  delete o.acao; delete o.texto; delete o.responsavel; delete o.para;
+  if (isTaskKind(kind)) { o.acao = texto; o.prazo = prazo; if (prazo && prazo !== it.prazo) o.prazo_dito = o.prazo_dito || 'definido por ti'; if (kind === 'tarefas') o.responsavel = pessoa; else o.para = pessoa; o.feito = !!it.feito; }
+  else { o.texto = texto; o.quem = pessoa; delete o.prazo; delete o.prazo_dito; delete o.feito; delete o.concluida_em; }
+  if (f.ok?.checked) o.confirmar = '';
+  if (pessoa && /Ninguém assumiu|Não é claro a quem/.test(o.confirmar || '')) o.confirmar = o.confirmar.replace(/Ninguém assumiu claramente[^.]*\.(\s*[^.]*”\.)?/, '').replace('Não é claro a quem foi pedido.', '').trim();
+  o.editado_em = stamp(); touch(o, rec);
+  rec.conteudo[from].splice(i, 1); (rec.conteudo[kind] = rec.conteudo[kind] || []).push(o);
+  dlg().close(); await persist('Alteração guardada.'); rebuild(); renderNav(); const y = main.scrollTop; route(); main.scrollTop = y;
+}
+async function deleteItem(f) {
+  const rec = recById(f.dataset.rec); const pos = rec && findItem(rec, f.dataset.item); if (!pos) return;
+  if (!confirm('Apagar este item?')) return;
+  STATE.apagados[f.dataset.item] = stamp(); rec.conteudo[pos[0]].splice(pos[1], 1); touch(rec);
+  dlg().close(); await persist('Item apagado.'); rebuild(); renderNav(); const y = main.scrollTop; route(); main.scrollTop = y;
+}
+function openAddTask(recId) {
+  const rec = recId && recById(recId);
+  openDlg(rec ? 'Acrescentar a esta reunião' : 'Nova tarefa', `<form class="stack" data-form="add-task" data-rec="${esc(rec ? rec.id : '')}" style="gap:var(--s-4)">
+    <div><span class="field-label" id="at-k-l">O que é</span><div class="seg" role="radiogroup" aria-labelledby="at-k-l"><label class="seg-opt"><input type="radio" name="kind" value="tarefas" checked> Tarefa minha</label><label class="seg-opt"><input type="radio" name="kind" value="pedidos"> À espera de alguém</label>${rec ? '<label class="seg-opt"><input type="radio" name="kind" value="decisoes"> Decisão</label>' : ''}</div></div>
+    <div><label class="field-label" for="at-t">Texto</label><input class="text-input" id="at-t" name="texto" required placeholder="Ex.: Enviar a proposta revista…"></div>
+    <div class="form-grid"><div class="at-who"><label class="field-label" for="at-p">De quem estás à espera</label><input class="text-input" id="at-p" name="pessoa" placeholder="Ex.: Ana Costa" translate="no"></div>
+      <div><label class="field-label" for="at-d">Prazo</label><input class="text-input" type="date" id="at-d" name="prazo"></div></div>
+    <div class="actions"><button class="btn primary" type="submit">${icon('plus')}Acrescentar</button><button class="btn" type="button" data-action="dlg-close">Cancelar</button></div></form>`);
+}
+async function saveAddTask(f) {
+  const rec = f.dataset.rec ? recById(f.dataset.rec) : avulsasRec(); if (!rec) return;
+  const kind = f.kind.value, texto = f.texto.value.trim(), pessoa = f.pessoa.value.trim(), prazo = isISO(f.prazo.value) ? f.prazo.value : null; if (!texto) return;
+  const base = { id: uid(), minuto: '', citacao: '', ev: 'manual', confirmar: '', criado_em: stamp(), alterado_em: stamp() };
+  const it = kind === 'tarefas' ? { ...base, acao: texto, responsavel: 'Eu', prazo, prazo_dito: prazo ? 'definido por ti' : '', feito: false }
+    : kind === 'pedidos' ? { ...base, acao: texto, para: pessoa, quem: 'Eu', prazo, prazo_dito: prazo ? 'definido por ti' : '', feito: false, confirmar: pessoa ? '' : 'Diz de quem estás à espera.' }
+    : { ...base, texto, quem: '' };
+  rec.conteudo = rec.conteudo || {}; if (rec.conteudo.v !== 2 && kind === 'decisoes') { toast('Nas reuniões antigas só se acrescentam tarefas.'); return; }
+  (rec.conteudo[kind] = rec.conteudo[kind] || []).push(it); touch(rec);
+  dlg().close(); await persist('Acrescentado.'); rebuild(); renderList(); renderNav(); const y = main.scrollTop; route(); main.scrollTop = y;
+}
+/* Lembrete a quem tem uma coisa nossa em atraso: texto pronto para o Teams ou para um email no Outlook */
+function followUpText(t) {
+  const nome = firstName(personLabel(t.owner || '')) || '';
+  const quando = t.m.avulsas ? '' : ` na reunião de ${fmtDate(t.m.date)} (“${t.m.title}”)`;
+  return `Olá${nome ? ' ' + nome : ''},\n\nRetomo o que ficou combinado${quando}: ${t.text.charAt(0).toLowerCase() + t.text.slice(1)}${t.due ? `, com prazo a ${fmtDate(t.due)}` : ''}.${t.t.citacao ? `\n(“${t.t.citacao}”)` : ''}\n\nConsegues dar-me um ponto de situação? Se precisares de alguma coisa da minha parte, diz.\n\nObrigado${OWNER() ? ',\n' + firstName(OWNER()) : ''}`;
+}
+function openFollowUp(key) {
+  const t = allTodos.find(x => x.key === key); if (!t) return;
+  const txt = followUpText(t), to = emailOf(t.owner || '');
+  openDlg('Lembrar', `<p class="field-help" style="margin-top:0">Para ${esc(personLabel(t.owner || 'a pessoa'))}${to ? ` (${esc(to)})` : ''}. Muda o que quiseres antes de enviar.</p>
+    <label class="sr-only" for="fu-t">Mensagem</label><textarea class="text-area" id="fu-t" rows="10">${esc(txt)}</textarea>
+    <div class="actions" style="margin-top:var(--s-4)"><button class="btn primary" type="button" data-action="fu-copy">${icon('copy')}Copiar para o Teams</button>
+      <a class="btn" id="fu-mail" href="${esc(mailtoHref(to ? [to] : [], `Seguimento: ${t.text}`, txt))}">${icon('doc')}Abrir email no Outlook</a></div>`);
+}
+
+/* ════════════════ Revisão da semana ════════════════ */
+function weekData() {
+  const from = addDays(TODAY, -6), next = addDays(TODAY, 7);
+  const ms = meetings.filter(m => !m.exemplo || usingExamples()).filter(m => (m.date || '') >= from && (m.date || '') <= TODAY);
+  const open = allTodos.filter(t => !isDone(t));
+  return {
+    from, ms,
+    feitas: allTodos.filter(t => isDone(t) && t.t.concluida_em >= from && t.t.concluida_em <= TODAY),
+    escorregaram: open.filter(t => t.due && t.due >= from && t.due < TODAY),
+    minhas: open.filter(t => mineTodo(t) && t.due && t.due >= TODAY && t.due <= next).sort((a, b) => a.due.localeCompare(b.due)),
+    esperaLonga: open.filter(t => waitingTodo(t) && (t.m.avulsas ? (t.t.criado_em || '').slice(0, 10) : t.m.date || '') <= addDays(TODAY, -7)),
+    confirmar: meetings.filter(m => !m.exemplo).reduce((n, m) => n + m.flags, 0),
+    decisoes: ms.flatMap(m => (m.c.v === 2 ? (m.c.decisoes || []) : (m.c.seccoes || []).filter(s => s.tipo === 'decisoes').flatMap(s => s.itens.map(t => ({ texto: t })))).map(it => ({ it, m }))),
+    proximas: upcoming(7),
+  };
+}
+function weekText(W2) {
+  const L = [`PONTO DE SITUAÇÃO DA SEMANA`, `${fmtDate(W2.from)} a ${fmtDate(TODAY)}${OWNER() ? `, ${displayName(OWNER())}` : ''}`];
+  const blk = (t, arr, f) => { if (arr.length) { L.push('', t); arr.forEach(x => L.push('- ' + f(x))); } };
+  blk('REUNIÕES', W2.ms, m => `${m.title} (${fmtDate(m.date, 'short')})`);
+  blk('DECISÕES', W2.decisoes, x => `${x.it.texto} (${x.m.title})`);
+  blk('FEITO', W2.feitas, t => t.text);
+  blk('PASSOU DO PRAZO', W2.escorregaram, t => `${t.text} (${t.owner ? personLabel(t.owner) : 'sem responsável'}, ${fmtDate(t.due, 'short')})`);
+  blk('À ESPERA HÁ MAIS DE UMA SEMANA', W2.esperaLonga, t => `${t.text} (${personLabel(t.owner || '?')})`);
+  blk('PRÓXIMA SEMANA', [...W2.minhas.map(t => `${t.text} (até ${fmtDate(t.due, 'short')})`), ...W2.proximas.map(a => `Reunião: ${a.titulo} (${fmtDate(a.data, 'short')})`)], x => x);
+  return L.join('\n');
+}
+function viewWeek() {
+  const W2 = weekData();
+  const box = (id, title, arr, render, empty) => `<section class="panel" aria-labelledby="${id}"><div class="panel-head"><h2 id="${id}">${title}${arr.length ? ` <span class="count">${nf(arr.length)}</span>` : ''}</h2></div>${arr.length ? render(arr) : `<p class="muted" style="margin:0">${empty}</p>`}</section>`;
+  const tasks = arr => arr.map(taskRow).join('');
+  return `<div class="page wide">
+    <div class="page-head"><div><h1 tabindex="-1">A tua semana em revisão</h1><p class="page-sub">${fmtDate(W2.from, 'short')} a ${fmtDate(TODAY, 'short')}: ${plural(W2.ms.length, 'reunião', 'reuniões')}, ${plural(W2.feitas.length, 'coisa feita', 'coisas feitas')}, ${plural(W2.decisoes.length, 'decisão', 'decisões')}.</p></div>
+      <div class="actions"><button class="btn" type="button" data-action="week-copy">${icon('copy')}Copiar ponto de situação</button></div></div>
+    <div class="stack">
+      ${W2.confirmar ? `<div class="status-line warn" style="margin:0">${icon('alert')}<p>${plural(W2.confirmar, 'item está', 'itens estão')} por confirmar nas tuas reuniões.</p></div>` : ''}
+      <div class="cols-2">
+        ${box('wk-late', 'Passou do prazo esta semana', W2.escorregaram, tasks, 'Nada passou do prazo.')}
+        ${box('wk-wait', 'À espera há mais de uma semana', W2.esperaLonga, arr => arr.map(t => taskRow(t)).join(''), 'Ninguém te deve nada há tanto tempo.')}
+      </div>
+      <div class="cols-2">
+        ${box('wk-next', 'A tua próxima semana', W2.minhas, tasks, 'Sem prazos teus nos próximos 7 dias.')}
+        ${box('wk-meet', 'Reuniões da próxima semana', W2.proximas, arr => `<div class="rows">${arr.map(a => `<a class="row-link" href="#/plano/${encodeURIComponent(a.id)}"><div class="row-main"><div class="row-title">${esc(a.titulo)}</div><div class="row-sub"><span>${esc(planWhen(a))}</span></div></div><span class="btn">Preparar</span></a>`).join('')}</div>`, 'Nenhuma reunião planeada. Traz as do Outlook na Agenda.')}
+      </div>
+      ${box('wk-dec', 'Decisões da semana', W2.decisoes, arr => `<div class="rows">${arr.map(x => `<a class="row-link" href="${meetingHref(x.m)}"><div class="row-main"><div class="row-title">${esc(x.it.texto)}</div><div class="row-sub"><span>${esc(x.m.title)}</span><span>${fmtDate(x.m.date, 'short')}</span></div></div></a>`).join('')}</div>`, 'Nenhuma decisão registada esta semana.')}
+      ${box('wk-done', 'Feito esta semana', W2.feitas, tasks, 'Ainda nada marcado como feito.')}
+    </div></div>`;
+}
+
+/* ════════════════ Registo de decisões ════════════════ */
+let DEC_F = { q: '', proj: '' };
+function allDecisions() {
+  return meetings.flatMap(m => (m.c.v === 2 ? (m.c.decisoes || []).map(it => ({ texto: it.texto, it, m })) : (m.c.seccoes || []).filter(s => s.tipo === 'decisoes').flatMap(s => s.itens.map(t => ({ texto: t, it: { texto: t }, m })))));
+}
+function decisionsList() {
+  const w = words(DEC_F.q), re = termRe(w);
+  const list = allDecisions().filter(d => (!DEC_F.proj || d.m.rec.projeto === DEC_F.proj) && w.every(x => norm([d.texto, d.it.citacao, d.it.quem, d.m.title, d.m.people.join(' '), d.m.tags.join(' ')].join(' ')).includes(x)));
+  const groups = []; list.forEach(d => { const l = isISO(d.m.date) ? DTF.month.format(toDate(d.m.date)) : 'Sem data'; const g = groups[groups.length - 1]; g && g[0] === l ? g[1].push(d) : groups.push([l, [d]]); });
+  return list.length ? groups.map(([l, arr]) => `<section class="task-group"><h2>${esc(cap(l))} <span class="count">${nf(arr.length)}</span></h2><div class="rows">${arr.map(d => `<a class="row-link" href="${meetingHref(d.m)}" ${d.it.minuto ? `data-goto-seek="${parseClock(d.it.minuto) ?? ''}"` : ''}><div class="row-main"><div class="row-title">${markStr(d.texto, re)}</div><div class="row-sub"><span>${esc(d.m.title)}</span><span>${fmtDate(d.m.date, 'short')}</span>${d.it.minuto ? `<span>${esc(d.it.minuto)}</span>` : ''}${d.it.confirmar ? '<span class="badge warn">A confirmar</span>' : ''}</div>${d.it.citacao ? `<p class="ev"><q>${markStr(d.it.citacao, re)}</q></p>` : ''}</div></a>`).join('')}</div></section>`).join('')
+    : `<div class="empty">${icon('check')}<h2>Nenhuma decisão</h2><p>${allDecisions().length ? 'Nada com estes filtros.' : 'As decisões das reuniões aparecem aqui.'}</p></div>`;
+}
+function viewDecisions() {
+  return `<div class="page">
+    <div class="page-head"><div><h1 tabindex="-1">Decisões</h1><p class="page-sub">Tudo o que ficou decidido nas reuniões, com a frase e o minuto. Pesquisa por tema, pessoa ou projeto.</p></div></div>
+    <div class="toolbar"><label class="sr-only" for="dec-q">Pesquisar decisões</label><input class="text-input" id="dec-q" value="${esc(DEC_F.q)}" placeholder="Ex.: duplo run, Pedro, orçamento…" style="flex:1;min-width:200px">
+      ${projects().length ? `<label class="sr-only" for="dec-p">Projeto</label><select class="text-input" id="dec-p" style="max-width:240px"><option value="">Todos os projetos</option>${projects().map(p => `<option value="${esc(p.id)}" ${DEC_F.proj === p.id ? 'selected' : ''}>${esc(p.nome)}</option>`).join('')}</select>` : ''}</div>
+    <div id="dec-list">${decisionsList()}</div></div>`;
+}
+
+/* ════════════════ Atualizar reuniões antigas para o formato novo ════════════════ */
+let UPD = null; // { id, job, prompt, resposta, draft, erro }
+function updJob(m) {
+  const job = { cues: [], turns: m.turns, data: m.data, alias: m.rec.eu || null, date: m.date, aproximado: !!m.rec.aproximado, fonte: m.rec.fonte, ficheiro: m.rec.ficheiro, origem: m.rec.origem, related: relatedOf(m, 3), pendentes: pendingFor(m.date).filter(x => x.t.m !== m) };
+  return job;
+}
+function viewUpdate(id) {
+  const m = byId.get(id); if (!m || m.exemplo) return `<div class="page"><h1 tabindex="-1">Reunião não encontrada</h1></div>`;
+  if (!UPD || UPD.id !== id) { const job = updJob(m); UPD = { id, job, prompt: buildPrompt(job), resposta: '', draft: null, erro: '' }; }
+  const base = `${slug(m.title)}-${id.slice(-4)}.atualizar`;
+  return `<div class="page">
+    <nav class="crumbs" aria-label="Caminho"><a href="${meetingHref(m)}">${esc(m.title)}</a><span aria-hidden="true">/</span><span>Atualizar</span></nav>
+    <div class="page-head"><div><h1 tabindex="-1">Atualizar para o formato novo</h1><p class="page-sub">O Kilo Code volta a ler a transcrição guardada e devolve decisões, tarefas e pedidos com a frase e o minuto. Revês antes de substituir. As tuas notas e o projeto mantêm-se; as tarefas antigas desta reunião são substituídas pelas novas.</p></div></div>
+    ${!m.turns.length ? `<div class="status-line warn">${icon('alert')}<p>Esta reunião não tem transcrição guardada: não é possível atualizar.</p></div>` : `
+    <div class="stack">
+      ${dirHandle && dirPerm === 'granted' ? `<section class="panel"><div class="panel-head"><h2>Com a pasta</h2></div><p style="margin:0 0 var(--s-4);color:var(--ink-2)">Prepara o pedido na pasta <code>entrada</code> e escreve <b>/reuniao</b> no Kilo Code. A resposta aparece no Início, pronta a rever.</p><button class="btn primary" type="button" data-action="upd-folder" data-base="${esc(base)}">Preparar o pedido na pasta</button></section>` : ''}
+      <section class="panel"><div class="panel-head"><h2>Copiar e colar</h2></div>
+        <div class="actions"><button class="btn ${dirHandle ? '' : 'primary'}" type="button" data-action="upd-copy">${icon('copy')}Copiar pedido</button></div>
+        <label class="sr-only" for="upd-answer">Resposta do Kilo Code</label><textarea class="text-area" id="upd-answer" placeholder="Cola aqui a resposta, começa por {…" style="margin-top:var(--s-4)">${esc(UPD.resposta)}</textarea>
+        <div id="upd-status">${UPD.erro ? `<div class="status-line bad">${icon('alert')}<p>${esc(UPD.erro)}</p></div>` : ''}</div>
+        <div id="upd-review">${UPD.draft ? reviewForm(UPD.draft, 'update:' + id) : ''}</div></section>
+    </div>`}</div>`;
+}
+function updParse() {
+  UPD.draft = null; UPD.erro = '';
+  if (!UPD.resposta.trim()) return;
+  try { const p = normalizeAI(extractJSON(UPD.resposta)); UPD.draft = makeDraft(UPD.job, p, Object.fromEntries(UPD.job.pendentes.map(x => [x.code, x.t.key]))); }
+  catch (e) { UPD.erro = e.message; }
+}
+async function saveUpdate(id, rv, files) {
+  const old = recById(id); if (!old || !UPD?.draft) return;
+  const fresh = finishDraft(UPD.draft, rv);
+  (old.conteudo?.tarefas || []).forEach(t => { if (t.id) STATE.apagados[t.id] = stamp(); });
+  Object.assign(old, { conteudo: fresh.conteudo, tipo: fresh.tipo, revisto_em: fresh.revisto_em, atualizado_de: 'formato antigo' });
+  if (fresh.projeto && !old.projeto) old.projeto = fresh.projeto;
+  touch(old);
+  await persist('Reunião atualizada.');
+  if (files?.length && dirHandle) { const inbox = await dirHandle.getDirectoryHandle(INBOX_DIR); await moveToDone(inbox, files); }
+  UPD = null; rebuild(); renderList(); renderNav(); go(meetingHref({ id }));
+}
+
+async function loadUpdateFromInbox(id) {
+  const base = Object.entries(STATE.atualizar || {}).find(([, v]) => v === id)?.[0];
+  if (!base || !dirHandle || dirPerm !== 'granted') return;
+  try {
+    const inbox = await dirHandle.getDirectoryHandle(INBOX_DIR);
+    const txt = await (await fileFromInbox(inbox, `${base}.resposta.json`)).text();
+    if (current?.view !== 'atualizar' || !UPD || UPD.id !== id) return;
+    UPD.resposta = txt; UPD.files = [`${base}.pedido.md`, `${base}.resposta.json`, `${base}.erro.txt`]; UPD.base = base; updParse();
+    const y = main.scrollTop; view.innerHTML = viewUpdate(id); main.scrollTop = y;
+  } catch (e) { /* ainda sem resposta */ }
+}
+/* ════════════════ Prazos para o Outlook ════════════════ */
+function tasksICS() {
+  const open = allTodos.filter(t => !isDone(t) && t.due && (!t.m.exemplo || usingExamples()));
+  return { n: open.length, text: icsFile(open.map(t => ({ uid: 'prazo-' + String(t.key).replace(/[^a-z0-9]/gi, ''), titulo: mineTodo(t) ? `Prazo: ${t.text}` : `À espera de ${personLabel(t.owner || '?')}: ${t.text}`, data: t.due, descricao: `${t.m.avulsas ? 'Tarefa avulsa' : `Da reunião “${t.m.title}” (${fmtDate(t.m.date)})`}${t.t.citacao ? `\n“${t.t.citacao}”` : ''}\nCaderno de Reuniões`, alarme: mineTodo(t) ? '-PT9H' : '' }))) };
+}
+
 /* ════════════════ Reunião: resumo estruturado ════════════════ */
 const timeBtnFor = (m, minuto) => { const sec = parseClock(minuto); return sec == null || !m.turns.length ? '' : `<button type="button" class="time-btn" data-seek="${sec}" title="Ver na transcrição">${esc(minuto)}</button>`; };
+const editBtn = (m, k, i) => m.exemplo ? '' : `<button type="button" class="btn-link confirm-btn" data-action="edit-item" data-rec="${esc(m.rec.id)}" data-k="${k}" data-i="${i}">Editar</button>`;
 const flagHTML = (m, k, i, it) => it.confirmar ? `<span class="badge warn" title="${esc(it.confirmar)}">A confirmar</span>${m.exemplo ? '' : `<button type="button" class="btn-link confirm-btn" data-action="confirm-item" data-k="${k}" data-i="${i}">Confirmar</button>`}` : '';
 function itemRow(m, k, i, it, label) {
   if (isTaskKind(k)) {
     const t = m.todos.find(x => x.t === it); if (!t) return '';
-    return `<div class="todo-item ${it.confirmar ? 'flagged' : ''}"><label><input type="checkbox" data-key="${esc(t.key)}" ${isDone(t) ? 'checked' : ''}><span>${esc(t.text)}${it.confirmar ? `<small class="flag-why">${esc(it.confirmar)}</small>` : ''}</span></label><span class="todo-side">${k === 'pedidos' ? `<span class="badge" translate="no" title="À espera de">${esc(t.owner ? personLabel(t.owner) : 'A quem?')}</span>` : ownerBadge(t)}${dueBadge(t, isDone(t))}${flagHTML(m, k, i, it)}${timeBtnFor(m, it.minuto)}</span>${quoteHTML(it, 'ev', !m.turns.length)}</div>`;
+    return `<div class="todo-item ${it.confirmar ? 'flagged' : ''}"><label><input type="checkbox" data-key="${esc(t.key)}" ${isDone(t) ? 'checked' : ''}><span>${esc(t.text)}${it.confirmar ? `<small class="flag-why">${esc(it.confirmar)}</small>` : ''}</span></label><span class="todo-side">${k === 'pedidos' ? `<span class="badge" translate="no" title="À espera de">${esc(t.owner ? personLabel(t.owner) : 'A quem?')}</span>` : ownerBadge(t)}${dueBadge(t, isDone(t))}${flagHTML(m, k, i, it)}${!m.exemplo && !isDone(t) && waitingTodo(t) && t.owner ? `<button type="button" class="btn-link confirm-btn" data-action="followup" data-key="${esc(t.key)}">Lembrar</button>` : ''}${editBtn(m, k, i)}${timeBtnFor(m, it.minuto)}</span>${quoteHTML(it, 'ev', !m.turns.length)}</div>`;
   }
-  return `<div class="item-row ${it.confirmar ? 'flagged' : ''}"><div class="item-main">${label ? `<span class="item-kind">${esc(label)}</span>` : ''}<span>${esc(curly(it.texto))}</span>${it.confirmar ? `<small class="flag-why">${esc(it.confirmar)}</small>` : ''}${quoteHTML(it, 'ev', !m.turns.length)}</div><span class="todo-side">${flagHTML(m, k, i, it)}${timeBtnFor(m, it.minuto)}</span></div>`;
+  return `<div class="item-row ${it.confirmar ? 'flagged' : ''}"><div class="item-main">${label ? `<span class="item-kind">${esc(label)}</span>` : ''}<span>${esc(curly(it.texto))}</span>${it.confirmar ? `<small class="flag-why">${esc(it.confirmar)}</small>` : ''}${quoteHTML(it, 'ev', !m.turns.length)}</div><span class="todo-side">${flagHTML(m, k, i, it)}${editBtn(m, k, i)}${timeBtnFor(m, it.minuto)}</span></div>`;
 }
 function structuredBody(m) {
   const c = m.c;
@@ -1760,6 +2209,7 @@ function structuredBody(m) {
     ${sec('dec-h', 'Decisões', list('decisoes'), 'Nenhuma decisão explícita.')}
     ${sec('mt-h', 'As minhas tarefas', mineT, 'Nada assumido por ti.')}
     ${sec('wt-h', 'À espera de outros', waiting, 'Nada à espera de outras pessoas.', 'Tarefas que outras pessoas assumiram e pedidos que lhes fizeste.')}
+    ${m.exemplo ? '' : `<p><button type="button" class="btn" data-action="add-task" data-rec="${esc(m.rec.id)}">${icon('plus')}Acrescentar tarefa, pedido ou decisão</button></p>`}
     ${list('bloqueios').length ? sec('bl-h', 'Bloqueios', list('bloqueios'), '') : ''}
     ${retomar.length ? sec('rt-h', 'Para retomar', retomar, '', 'Perguntas em aberto, propostas sem decisão e assuntos por fechar.') : ''}
     ${(c.notas_ia || []).length ? `<section class="r-sec" aria-labelledby="ni-h"><h2 id="ni-h">Outras notas</h2>${c.notas_ia.map(n => `<h3>${esc(n.titulo)}</h3>${n.texto.split(/\n+/).map(x => `<p>${esc(curly(x))}</p>`).join('')}`).join('')}</section>` : ''}
@@ -1801,6 +2251,7 @@ function viewMeeting(m) {
       ${c.contexto || rel.length ? `<section class="r-sec" aria-labelledby="ctx-h"><h2 id="ctx-h">Contexto</h2>${c.contexto ? `<p>${esc(curly(c.contexto))}</p>` : ''}
         ${rel.length ? `<div class="related rows">${rel.map(x => `<a class="row-link" href="${meetingHref(x)}"><div class="row-main"><div class="row-title">${esc(x.title)}</div><div class="row-sub"><span>${fmtDate(x.date, 'short')}</span><span>${esc(x.type)}</span></div></div></a>`).join('')}</div>` : ''}</section>` : ''}
       ${(c.temas || []).length ? `<section class="r-sec" aria-labelledby="tem-h"><h2 id="tem-h">${v2 ? 'Temas' : 'Temas Discutidos'}</h2><div class="temas">${c.temas.map(t => { const s = parseClock(t.inicio); return `<div class="tema">${s != null ? timeBtn(t.inicio + (t.fim ? '–' + t.fim : ''), s) : '<span></span>'}<b>${esc(t.titulo)}</b><p>${esc(curly(t.resumo))}</p></div>`; }).join('')}</div></section>` : ''}
+      ${!v2 && !m.exemplo && m.turns.length ? `<div class="callout">${icon('info')}<p>Esta reunião está no formato antigo, sem a frase e o minuto de cada tarefa. <a class="btn-link" href="#/atualizar/${encodeURIComponent(m.id)}">Atualizar para o formato novo</a></p></div>` : ''}
       ${v2 ? structuredBody(m) : `${(c.seccoes || []).filter(s => s.titulo !== 'Plano de Ação').map(renderSection).join('')}
       ${m.todos.length ? `<section class="r-sec" aria-labelledby="pa-h"><h2 id="pa-h">Plano de Ação</h2>${tasks}</section>` : ''}`}
       ${pmoMeetingSection(m)}
@@ -1881,7 +2332,8 @@ function viewTasks() {
     ['Concluídas', list.filter(isDone), ''],
   ].filter(g => g[1].length);
   return `<div class="page">
-    <div class="page-head"><div><h1 tabindex="-1">Tarefas</h1><p class="page-sub">${f.who === 'others' ? 'O que está à espera de outras pessoas: tarefas que assumiram e pedidos que lhes fizeste.' : 'O que assumiste nas reuniões, por prazo.'}</p></div></div>
+    <div class="page-head"><div><h1 tabindex="-1">Tarefas</h1><p class="page-sub">${f.who === 'others' ? 'O que está à espera de outras pessoas: tarefas que assumiram e pedidos que lhes fizeste.' : 'O que assumiste nas reuniões, por prazo.'}</p></div>
+      <div class="actions"><button class="btn primary" type="button" data-action="add-task">${icon('plus')}Nova tarefa</button><button class="btn" type="button" data-action="tasks-ics" title="Descarrega os prazos para importar no Outlook">${icon('calendar')}Prazos para o Outlook</button></div></div>
     <div class="toolbar">
       ${knowsMe() ? `<div class="seg" role="group" aria-label="Responsável"><button type="button" data-f="who:mine" aria-pressed="${f.who === 'mine'}">As minhas</button><button type="button" data-f="who:others" aria-pressed="${f.who === 'others'}">À espera de outros</button><button type="button" data-f="who:all" aria-pressed="${f.who === 'all'}">Todas</button></div>` : ''}
       <div class="seg" role="group" aria-label="Estado"><button type="button" data-f="state:open" aria-pressed="${f.state === 'open'}">Em aberto</button><button type="button" data-f="state:done" aria-pressed="${f.state === 'done'}">Concluídas</button><button type="button" data-f="state:all" aria-pressed="${f.state === 'all'}">Todas</button></div>
@@ -2103,6 +2555,17 @@ function viewHelp() {
       <li><b>Decisão</b>: só o que ficou decidido. Uma ideia sem acordo é uma <b>proposta</b> e fica em <b>Para retomar</b>, com as perguntas em aberto.</li>
       <li>Cada item guarda a frase da transcrição e o minuto. Clica no minuto para ler o contexto na transcrição.</li>
       <li><b>A confirmar</b>: o Kilo Code não tinha a certeza (quem, quando, ou a frase não aparece na transcrição). Confirma quando souberes.</li></ul>
+    <h2>Preparar reuniões e o Outlook</h2>
+    <ol><li>Em <a class="btn-link" href="#/agenda">Agenda</a>, clica em <b>Planear reunião</b> ou traz as reuniões do Outlook: no Outlook, abre a reunião (ou o calendário), <b>Ficheiro</b>, <b>Guardar como</b>, formato <b>iCalendar (.ics)</b>, e escolhe o ficheiro na Agenda (ou guarda-o na pasta <code>entrada</code>).</li>
+      <li>Na reunião planeada, o caderno mostra <b>Para levar</b>: o que te devem, o que deves, o que ficou em aberto e as decisões recentes com essas pessoas. Usa o <b>+</b> para pôr na agenda.</li>
+      <li><b>Abrir no Outlook</b> descarrega um ficheiro de calendário com a agenda e um lembrete; <b>Enviar a agenda por email</b> abre um email novo no Outlook.</li>
+      <li>Quando guardares a ata dessa reunião, ela fica ligada à reunião planeada, e os pontos da agenda que não foram falados aparecem em <b>Para retomar</b>.</li></ol>
+    <h2>Editar, acrescentar e lembrar</h2>
+    <ul><li>Em cada reunião, <b>Editar</b> corrige o texto, a pessoa, o prazo ou o tipo de um item. <b>Acrescentar</b> junta uma tarefa, um pedido ou uma decisão.</li>
+      <li>Em <a class="btn-link" href="#/tarefas">Tarefas</a>, <b>Nova tarefa</b> cria uma tarefa sem reunião. <b>Prazos para o Outlook</b> descarrega os prazos como ficheiro de calendário.</li>
+      <li>Num item à espera de outra pessoa, <b>Lembrar</b> prepara uma mensagem educada para o Teams ou abre um email no Outlook.</li></ul>
+    <h2>Revisão da semana e decisões</h2>
+    <p>No Início, <b>Revisão da semana</b> junta o que fizeste, o que passou do prazo, o que espera há mais de uma semana e as decisões; copia-o como ponto de situação. Em <a class="btn-link" href="#/decisoes">Decisões</a> pesquisas tudo o que ficou decidido, com a frase e o minuto.</p>
     <h2>Projetos</h2>
     <p>Em <a class="btn-link" href="#/projetos">Projetos</a> juntas as reuniões de um mesmo assunto: o que mudou desde a última reunião, os compromissos em aberto, os bloqueios e as decisões. A saúde do projeto usa só factos ditos nas reuniões. Para ver um exemplo, abre o <a class="btn-link" href="#/p/exemplo">projeto de exemplo</a>.</p>
     <h2>Plano B: copiar e colar</h2>
@@ -2111,7 +2574,8 @@ function viewHelp() {
     <ul><li><b>Tarefas</b> tem duas listas: <b>As minhas</b> e <b>À espera de outros</b>. Marca-as quando estiverem feitas: o caderno regista a data.</li>
       <li>Na reunião, <b>Copiar ata</b> copia a ata pronta para colar num email ou no Teams.</li>
       <li>Pesquisa com a caixa da barra lateral ou com <kbd class="kbd">Ctrl</kbd> + <kbd class="kbd">K</kbd>: encontra reuniões, tarefas e decisões.</li>
-      <li>O coaching de comunicação abre no botão <b>Coaching</b> de cada reunião, sem misturar com o resumo. Podes desligá-lo em <a class="btn-link" href="#/definicoes">Definições</a>.</li></ul>
+      <li>O coaching de comunicação abre no botão <b>Coaching</b> de cada reunião, sem misturar com o resumo. Escolhe lá uma meta (por exemplo, menos bordões) para veres a evolução. Podes desligá-lo em <a class="btn-link" href="#/definicoes">Definições</a>.</li>
+      <li>Reuniões antigas, sem a frase e o minuto de cada item: abre-as e clica em <b>Atualizar para o formato novo</b>.</li></ul>
     <h2>Se algo não correr bem</h2>
     <ul><li><b>O Kilo Code não mostra /reuniao:</b> abre a pasta do caderno no VS Code e escreve <code>/reload</code>.</li>
       <li><b>Resposta não válida ou fraca:</b> no ecrã de revisão, clica em <b>Pedir outra resposta</b> e escreve outra vez <b>/reuniao</b>.</li>
@@ -2148,6 +2612,11 @@ function route() {
   else if (v === 'nota') { current.view = 'nota'; view.innerHTML = viewNote(); title = 'Nota rápida'; }
   else if (v === 'rever' && arg) { current.view = 'rever'; title = 'Rever antes de guardar'; viewReview(arg); }
   else if (v === 'tarefas') { view.innerHTML = viewTasks(); title = 'Tarefas'; }
+  else if (v === 'agenda') { view.innerHTML = viewAgenda(); title = 'Agenda'; }
+  else if (v === 'plano' && arg) { current.view = 'plano'; view.innerHTML = viewPlan(arg); title = arg === 'novo' ? 'Planear reunião' : (planById(arg)?.titulo || 'Reunião planeada'); }
+  else if (v === 'semana') { view.innerHTML = viewWeek(); title = 'Revisão da semana'; }
+  else if (v === 'decisoes') { view.innerHTML = viewDecisions(); title = 'Decisões'; }
+  else if (v === 'atualizar' && arg) { current.view = 'atualizar'; view.innerHTML = viewUpdate(arg); title = 'Atualizar reunião'; loadUpdateFromInbox(arg); }
   else if (v === 'pessoas') { view.innerHTML = viewPeople(); title = 'Pessoas'; }
   else if (v === 'evolucao') { view.innerHTML = coachingOn() ? viewEvolution() : `<div class="page"><h1 tabindex="-1">Evolução</h1><div class="empty">${icon('mic')}<h2>O coaching está desligado</h2><p>A vista Evolução mostra como tu falas nas reuniões. Liga-a em <a class="btn-link" href="#/definicoes">Definições</a>, se quiseres.</p></div></div>`; title = 'Evolução'; }
   else if (v === 'ajuda') { view.innerHTML = viewHelp(); title = 'Como usar'; }
@@ -2197,6 +2666,7 @@ search.addEventListener('keydown', e => {
 $('#chips').addEventListener('click', e => { const b = e.target.closest('.chip'); if (!b) return; typeFilter = typeFilter === b.dataset.type ? null : b.dataset.type; renderList(); writeUrlState(); });
 
 document.addEventListener('click', async e => {
+  const gs = e.target.closest('[data-goto-seek]'); if (gs && gs.dataset.gotoSeek !== '') { const sec = +gs.dataset.gotoSeek; setTimeout(() => seek(sec), 150); }
   const fg = e.target.closest('[data-f-go]'); if (fg) { const [k, v] = fg.dataset.fGo.split(':'); const f = prefs.get('filtro-tarefas', { who: 'mine', state: 'open' }); f[k] = v; f.state = 'open'; prefs.set('filtro-tarefas', f); }
   const t = e.target.closest('[data-search],[data-action],[data-f],.ribbon-key,[data-seek],[data-alias],[data-inbox-who],[data-add-person]'); if (!t) return;
   if (t.dataset.addPerson != null) { const inp = $('#pj-pes'); const cur = inp.value.split(';').map(x => x.trim()).filter(Boolean); if (!cur.some(x => samePerson(x, t.dataset.addPerson))) inp.value = [...cur, t.dataset.addPerson].join('; '); return; }
@@ -2215,6 +2685,28 @@ document.addEventListener('click', async e => {
   if (a === 'print') window.print();
   else if (a === 'cmdk') openCmdk();
   else if (a === 'coach') openCoach();
+  else if (a === 'dlg-close') dlg().close();
+  else if (a === 'edit-item') openEdit(t.dataset.rec, t.dataset.k, +t.dataset.i);
+  else if (a === 'item-delete') deleteItem(t.closest('form'));
+  else if (a === 'add-task') openAddTask(t.dataset.rec);
+  else if (a === 'followup') openFollowUp(t.dataset.key);
+  else if (a === 'fu-copy') copyText($('#fu-t').value, 'Mensagem copiada. Cola-a no Teams.');
+  else if (a === 'week-copy') copyText(weekText(weekData()), 'Ponto de situação copiado.');
+  else if (a === 'tasks-ics') { const r = tasksICS(); if (!r.n) toast('Não há tarefas em aberto com prazo.'); else { download(`prazos-${TODAY}.ics`, r.text, 'text/calendar'); toast(`${plural(r.n, 'prazo', 'prazos')} no ficheiro. Abre-o para os juntar ao Outlook.`); } }
+  else if (a === 'ics-import') { const inp = document.createElement('input'); inp.type = 'file'; inp.accept = '.ics,text/calendar'; inp.multiple = true; inp.onchange = async () => { let n = 0; for (const f of inp.files) n += importICS(await f.text()).n; await persist(`Agenda: ${plural(n, 'reunião nova', 'reuniões novas')} do Outlook.`); renderNav(); route(); }; inp.click(); }
+  else if (a === 'plan-add' || a === 'plan-add-all') {
+    const ta = $('#pl-pontos'); if (!ta) return;
+    const cur = ta.value.split('\n').map(x => x.trim()).filter(Boolean);
+    const add = a === 'plan-add' ? [t.dataset.text] : $$('.brief-sec').slice(0, 3).flatMap(sec => $$('.add-point', sec).map(x => x.dataset.text)); // sem as decisões
+    for (const x of add) if (x && !cur.includes(x)) cur.push(x);
+    ta.value = cur.join('\n'); readPlanForm($('form[data-form=plan]')); toast(a === 'plan-add' ? 'Posto na agenda.' : 'Pendentes postos na agenda.');
+  }
+  else if (a === 'plan-copy') { readPlanForm($('form[data-form=plan]')); copyText(agendaText(PLAN), 'Agenda copiada. Cola-a no convite do Teams.'); }
+  else if (a === 'plan-ics') { if (await savePlan(true)) { download(`${slug(PLAN.titulo) || 'reuniao'}.ics`, planICS(PLAN), 'text/calendar'); toast('Abre o ficheiro descarregado: o Outlook cria o compromisso com a agenda.'); } }
+  else if (a === 'plan-mail') { if (await savePlan(true)) { const to = PLAN.pessoas.map(emailOf).filter(Boolean); location.href = mailtoHref(to, PLAN.titulo, agendaText(PLAN)); } }
+  else if (a === 'plan-delete') { if (!confirm('Apagar esta reunião planeada?')) return; STATE.apagados[PLAN.id] = stamp(); STATE.agenda = agenda().filter(x => x.id !== PLAN.id); PLAN = null; await persist('Reunião planeada apagada.'); renderNav(); go('#/agenda'); }
+  else if (a === 'upd-copy') { if (await copyText(UPD.prompt, 'Pedido copiado. Cola-o no Kilo Code.')) {} }
+  else if (a === 'upd-folder') { const b = t.dataset.base; const inbox = await dirHandle.getDirectoryHandle(INBOX_DIR, { create: true }); await writeFile(inbox, `${b}.pedido.md`, buildPrompt(UPD.job, `entrada/${b}.resposta.json`)); STATE.atualizar = { ...(STATE.atualizar || {}), [b]: UPD.id }; await persist(); toast('Pedido na pasta entrada. No Kilo Code escreve /reuniao.'); scanInbox(); }
   else if (a === 'coach-close' || a === 'coach-close-nav') $('#coach').close();
   else if (a === 'copy-ata' && m) copyText(ataText(m), 'Ata copiada. Cola-a num email ou no Teams.');
   else if (a === 'delete' && m && !m.exemplo) {
@@ -2248,11 +2740,14 @@ document.addEventListener('submit', async e => {
   const f = e.target.closest('form[data-form]'); if (!f) return; e.preventDefault();
   if (f.dataset.form === 'review') {
     const rv = collectReview(f), btn = f.querySelector('[type=submit]'); if (btn) btn.disabled = true;
-    try { if (f.dataset.ctx === 'wizard') await saveMeeting(rv); else if (REVIEW) await saveInboxDraft(REVIEW, rv); }
+    try { if (f.dataset.ctx === 'wizard') await saveMeeting(rv); else if (f.dataset.ctx.startsWith('update:')) await saveUpdate(f.dataset.ctx.slice(7), rv, UPD?.files); else if (REVIEW) await saveInboxDraft(REVIEW, rv); }
     catch (err) { toast('Não foi possível guardar: ' + err.message); if (btn) btn.disabled = false; }
     return;
   }
   if (f.dataset.form === 'note') { await saveNote(f); return; }
+  if (f.dataset.form === 'plan') { if (await savePlan()) { renderNav(); const y = main.scrollTop; view.innerHTML = viewPlan(PLAN.id); main.scrollTop = y; } return; }
+  if (f.dataset.form === 'item') { await saveItemForm(f); return; }
+  if (f.dataset.form === 'add-task') { await saveAddTask(f); return; }
   if (f.dataset.form === 'project') {
     const list = (v, sep) => v.split(sep).map(x => x.trim()).filter(Boolean);
     const data = { nome: f.nome.value.trim(), descricao: f.descricao.value.trim(), palavras: list(f.palavras.value, ','), pessoas: list(f.pessoas.value, ';') };
@@ -2275,6 +2770,9 @@ document.addEventListener('submit', async e => {
 });
 view.addEventListener('change', async e => {
   if (e.target.matches('[data-proj-assign]')) { const r = STATE.reunioes.find(x => x.id === e.target.dataset.projAssign); if (!r) return; touch(r); const pid = e.target.value; if (pid) { r.projeto = pid; const pp = projectById(pid); if (r.conteudo?.pmo && pp) { r.conteudo.pmo.projeto = pp.nome; assignCodes(pp, r.conteudo.pmo, meetings, r.id); } } else delete r.projeto; await persist(pid ? 'Reunião associada ao projeto.' : 'Reunião retirada do projeto.'); rebuild(); renderNav(); route(); return; }
+  if (e.target.id === 'dec-p') { DEC_F.proj = e.target.value; $('#dec-list').innerHTML = decisionsList(); return; }
+  if (e.target.id === 'coach-meta') { STATE.coach_meta = e.target.value; await persist(); openCoach(); return; }
+  if (['pl-pessoas', 'pl-proj', 'pl-data'].includes(e.target.id) && PLAN) { readPlanForm(e.target.form); const y = main.scrollTop; view.innerHTML = viewPlan(PLAN.novo ? 'atual' : PLAN.id); main.scrollTop = y; return; }
   if (e.target.id === 's-coaching') { STATE.coach = e.target.checked; await persist(STATE.coach ? 'Coaching ligado.' : 'Coaching desligado.'); renderNav(); return; }
   if (e.target.closest('form[data-form=review]')) { const it = e.target.closest('.rv-item'); if (it && e.target.name === 'keep') it.classList.toggle('off', !e.target.checked); return; }
   if (e.target.id === 'w-date') { if (isISO(e.target.value)) { W.date = e.target.value; W.copied = false; wizardAnalyse(); wizardParse(); rerenderWizard(); } return; }
@@ -2303,6 +2801,8 @@ view.addEventListener('input', e => {
       const st = box?.closest('.step'); if (st) st.classList.toggle('done', !!W.draft);
     }, 250);
   }
+  if (e.target.id === 'dec-q') { DEC_F.q = e.target.value; $('#dec-list').innerHTML = decisionsList(); return; }
+  if (e.target.id === 'upd-answer') { UPD.resposta = e.target.value; clearTimeout(answerT); answerT = setTimeout(() => { updParse(); $('#upd-status').innerHTML = UPD.erro ? `<div class="status-line bad">${icon('alert')}<p>${esc(UPD.erro)}</p></div>` : ''; $('#upd-review').innerHTML = UPD.draft ? reviewForm(UPD.draft, 'update:' + UPD.id) : ''; }, 250); return; }
   if (NOTE && ['n-titulo', 'n-pessoas', 'n-texto'].includes(e.target.id)) {
     NOTE[{ 'n-titulo': 'titulo', 'n-pessoas': 'pessoas', 'n-texto': 'texto' }[e.target.id]] = e.target.value;
     if (e.target.id === 'n-texto') $('#note-preview').innerHTML = notePreview();
@@ -2341,7 +2841,7 @@ const cmdk = $('#cmdk'), cq = $('#cmdk-q'), clist = $('#cmdk-list');
 let citems = [], csel = 0;
 function cmdkRender() {
   const w = words(cq.value), re = termRe(w);
-  const nav = [['#/nova', 'plus', 'Nova reunião'], ['#/', 'home', 'Início'], ['#/tarefas', 'tasks', 'Tarefas'], ['#/projetos', 'folder', 'Projetos'], ['#/nota', 'doc', 'Nota rápida'], ['#/pessoas', 'users', 'Pessoas'], ...(coachingOn() ? [['#/evolucao', 'chart', 'Evolução']] : []), ['#/ajuda', 'help', 'Como usar'], ['#/definicoes', 'gear', 'Definições']]
+  const nav = [['#/nova', 'plus', 'Nova reunião'], ['#/plano/novo', 'calendar', 'Planear reunião'], ['#/', 'home', 'Início'], ['#/agenda', 'calendar', 'Agenda'], ['#/tarefas', 'tasks', 'Tarefas'], ['#/decisoes', 'check', 'Decisões'], ['#/semana', 'chart', 'Revisão da semana'], ['#/projetos', 'folder', 'Projetos'], ['#/nota', 'doc', 'Nota rápida'], ['#/pessoas', 'users', 'Pessoas'], ...(coachingOn() ? [['#/evolucao', 'chart', 'Evolução']] : []), ['#/ajuda', 'help', 'Como usar'], ['#/definicoes', 'gear', 'Definições']]
     .filter(([, , l]) => w.every(x => norm(l).includes(x))).map(([h, ic, l]) => ({ ic, title: l, run: () => go(h) }));
   const actions = [{ ic: THEME_ICON[theme], title: 'Mudar tema', key: 'tema escuro claro', run: cycleTheme }]
     .concat(current?.id ? [{ ic: 'copy', title: 'Copiar ata desta reunião', key: 'copiar ata email', run: () => copyText(ataText(byId.get(current.id)), 'Ata copiada.') }, { ic: 'printer', title: 'Imprimir ou guardar em PDF', key: 'imprimir pdf', run: () => setTimeout(() => window.print(), 50) }, ...(coachingOn() ? [{ ic: 'mic', title: 'Coaching desta reunião', key: 'coaching radar comunicação', run: () => setTimeout(openCoach, 50) }] : [])] : [])
@@ -2375,6 +2875,7 @@ clist.addEventListener('click', e => { const li = e.target.closest('.cmdk-item')
 clist.addEventListener('pointermove', e => { const li = e.target.closest('.cmdk-item'); if (li && +li.dataset.i !== csel) { csel = +li.dataset.i; cmdkMove(0); } });
 cmdk.addEventListener('click', e => { if (e.target === cmdk) cmdk.close(); });
 $('#coach').addEventListener('click', e => { if (e.target.id === 'coach') e.target.close(); });
+$('#dlg').addEventListener('click', e => { if (e.target.id === 'dlg') e.target.close(); });
 $('#cmdk-open').addEventListener('click', openCmdk);
 
 document.addEventListener('keydown', e => {

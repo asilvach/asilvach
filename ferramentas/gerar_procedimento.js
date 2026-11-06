@@ -57,6 +57,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await snap('reuniao');
     await top('#wt-h'); await snap('espera', 'section[aria-labelledby=wt-h]');
     await p.goto(URL + '#/tarefas'); await sleep(400); await snap('tarefas');
+    await p.evaluate(() => { location.hash = '#/plano/novo?pessoas=Pedro%20Alves&titulo=Ponto%20semanal%20com%20o%20fornecedor'; }); await sleep(600);
+    await p.fill('#pl-obj', 'Fechar a data de abertura do acesso'); await p.click('[data-action=plan-add-all]'); await sleep(2900); await top('.crumbs'); await snap('plano');
     await p.goto(URL + '#/nota'); await sleep(400);
     await p.fill('#n-titulo', 'Revisão de SLA (presencial)'); await p.fill('#n-pessoas', 'Pedro Alves');
     await p.fill('#n-texto', 'Tempos de resposta dentro do previsto, exceto em outubro.\nD: Manter o SLA de 4 horas\nT: Enviar o relatório mensal até 20/11\nE: Pedro Alves — mandar os números de outubro\n?: Quem aprova as exceções?'); await sleep(300);
@@ -141,6 +143,13 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       ${img('espera', 'À espera de outros')}</section>
 
     <section class="break"><h2>Vista Tarefas</h2><p>Duas listas: <b>As minhas</b> (o que assumiste) e <b>À espera de outros</b> (o que outras pessoas assumiram e os pedidos que lhes fizeste). Ao marcar uma tarefa como feita, o caderno regista a data.</p>${img('tarefas', 'Vista Tarefas')}</section>
+
+    <section class="break"><h2>Preparar a próxima reunião e o Outlook</h2>
+      <p>Em <b>Agenda</b>, clica em <b>Planear reunião</b> ou traz as reuniões do Outlook: no Outlook, abre a reunião (ou o calendário), <b>Ficheiro</b>, <b>Guardar como</b>, formato <b>iCalendar (.ics)</b>, e guarda o ficheiro na pasta <code>entrada</code>. O caderno mostra, ao lado, o que te devem, o que deves, o que ficou em aberto e as decisões com essas pessoas. Usa o <b>+</b> para pôr cada ponto na agenda.</p>
+      ${img('plano', 'Preparar uma reunião')}
+      <ul><li><b>Abrir no Outlook</b>: descarrega um ficheiro de calendário; abre-o e o Outlook cria o compromisso com a agenda e um lembrete.</li>
+        <li><b>Enviar a agenda por email</b>: abre um email novo no Outlook com a agenda.</li>
+        <li>Nas tarefas à espera de outra pessoa, <b>Lembrar</b> prepara uma mensagem de seguimento. Em <b>Tarefas</b>, <b>Prazos para o Outlook</b> põe os prazos no teu calendário.</li></ul></section>
 
     <section class="break"><h2>Reuniões sem transcrição: nota rápida</h2>
       <p>Para reuniões presenciais ou chamadas sem transcrição: <b>Nova reunião</b>, <b>nota rápida</b>. Escreve à vontade e começa as linhas por <code>D:</code> (decisão), <code>T:</code> (tarefa tua), <code>E: Nome — …</code> (à espera de alguém), <code>?</code> (pergunta), <code>B:</code> (bloqueio) ou <code>R:</code> (retomar). Acaba com “até 20/11” para dar um prazo. Não passa pelo Kilo Code.</p>

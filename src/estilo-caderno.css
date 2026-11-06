@@ -184,3 +184,45 @@ details.panel > summary::-webkit-details-marker { display: none; }
   .coach-head, .coach-body, .coach-foot { padding-inline: var(--s-4); }
 }
 @media print { #coach { display: none !important; } }
+
+/* ── v9: agenda e preparação, janela genérica, tarefas manuais, meta de coaching ── */
+#dlg { padding: 0; border: 1px solid var(--line); border-radius: var(--r-lg); width: min(620px, calc(100vw - 32px)); max-height: calc(100dvh - 64px); margin: 10dvh auto auto; background: var(--paper); color: var(--ink); box-shadow: var(--pop-shadow); overflow-y: auto; overscroll-behavior: contain; }
+#dlg::backdrop { background: var(--scrim); }
+#dlg .coach-head h2 { font-size: var(--t-lg); }
+#dlg .text-input { padding-left: var(--s-3); }
+@media (prefers-reduced-motion: no-preference) { #dlg[open] { animation: coach-in var(--dur-short) var(--ease-out); } }
+.seg-opt { display: inline-flex; align-items: center; gap: var(--s-2); min-height: 32px; padding: 0 var(--s-3); border-radius: var(--r-sm); font-size: var(--t-sm); color: var(--ink-2); cursor: pointer; }
+.seg-opt:has(input:checked) { background: var(--paper); color: var(--ink); box-shadow: var(--shadow), 0 0 0 1px var(--line); }
+.seg-opt input { accent-color: var(--brand); }
+form[data-form=add-task]:has(input[value=tarefas]:checked) .at-who, form[data-form=add-task]:has(input[value=decisoes]:checked) .at-who { visibility: hidden; }
+.task-tools { display: inline-flex; gap: var(--s-3); margin-left: var(--s-3); font-size: var(--t-xs); }
+.task-tools .btn-link, .confirm-btn { font-size: var(--t-xs); }
+.task-tools .btn-link { border: 0; background: none; padding: 0; cursor: pointer; }
+.plan-grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(0, 1fr); gap: var(--s-10); align-items: start; }
+.form-grid.three { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr) minmax(0, 1fr); }
+.brief { position: sticky; top: calc(var(--appbar) + var(--s-6)); padding: var(--s-5) var(--s-6); border-radius: var(--r-lg); background: var(--fill); }
+.brief h2 { margin: 0; font-size: var(--t-lg); }
+.brief .sec-sub { margin: var(--s-1) 0 var(--s-4); }
+.brief-sec { margin-top: var(--s-5); }
+.brief-sec h3 { margin: 0 0 var(--s-2); font-size: var(--t-sm); }
+.brief-sec h3 .count { color: var(--ink-3); font-weight: 500; }
+.brief-row { display: flex; gap: var(--s-3); align-items: flex-start; padding: var(--s-2) 0; border-top: 1px solid var(--line); font-size: var(--t-sm); }
+.brief-row .row-sub { font-size: var(--t-xs); }
+.brief-row .row-sub .late { color: var(--bad); }
+.add-point { flex-shrink: 0; display: inline-grid; place-items: center; width: 28px; height: 28px; border: 1px solid var(--line); border-radius: var(--r-sm); background: var(--paper); color: var(--brand-text); cursor: pointer; }
+.add-point .icon { width: 14px; height: 14px; }
+.brief > .btn { margin-top: var(--s-5); }
+.coach-goal { margin: 0 0 var(--s-6); padding: var(--s-4) var(--s-5); border-radius: var(--r-md); background: var(--fill); }
+.coach-goal-head { display: flex; align-items: center; gap: var(--s-3); flex-wrap: wrap; }
+.coach-goal-head .field-label { margin: 0; }
+.coach-goal-head select { width: auto; min-width: 220px; padding-left: var(--s-3); }
+.coach-verdict { margin: var(--s-3) 0 0; font-weight: 600; }
+@media (max-width: 60rem) {
+  .plan-grid, .form-grid.three { grid-template-columns: minmax(0, 1fr); }
+  .brief { position: static; padding: var(--s-4); }
+  #dlg { width: 100vw; max-width: 100vw; max-height: 92dvh; margin: auto 0 0; border-radius: var(--r-lg) var(--r-lg) 0 0; }
+  .task-tools { margin-left: 0; }
+}
+@media print { #dlg { display: none !important; } }
+
+.plan-form .text-area, #dlg .text-area { font-family: var(--font-ui); font-size: var(--t-sm); }

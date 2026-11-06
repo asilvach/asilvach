@@ -2,7 +2,22 @@
 
 Prioridade = valor no dia a dia ÷ esforço. ✅ feito · 🔜 próximo · 💡 ideia
 
-## v8 (atual): organização pessoal fiável
+## v9 (atual): preparar, seguir e o Outlook
+
+| | Feature |
+|---|---|
+| ✅ | Agenda: planear reuniões ou trazê-las do Outlook (.ics guardado no Outlook, escolhido ou deixado em `entrada`) |
+| ✅ | Preparar a reunião: o que me devem, o que devo, o que está em aberto e as decisões com essas pessoas; agenda com um clique |
+| ✅ | Para o Outlook sem rede: compromisso .ics com agenda, participantes e lembrete; email com a agenda (mailto) |
+| ✅ | A ata fica ligada à reunião planeada; pontos da agenda não falados vão para "Para retomar" |
+| ✅ | Editar qualquer item depois de guardar (tipo, texto, pessoa, prazo) e acrescentar tarefas, pedidos e decisões |
+| ✅ | Tarefas avulsas (sem reunião) e prazos para o Outlook (.ics) |
+| ✅ | Lembrar: mensagem de seguimento pronta para o Teams ou email no Outlook |
+| ✅ | Revisão da semana (copiar como ponto de situação) e registo de decisões pesquisável |
+| ✅ | Atualizar reuniões antigas para o formato com citações (copiar e colar ou pasta) |
+| ✅ | Coaching: meta pessoal com a evolução ao longo das reuniões |
+
+## v8: organização pessoal fiável
 
 | | Feature |
 |---|---|

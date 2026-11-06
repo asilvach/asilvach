@@ -38,7 +38,17 @@ outros), não de gestão de equipas.
   (`mergeState`: por id, ganha `alterado_em` mais recente; `apagados` = marcas de apagado; `origem` evita
   importações duplicadas) antes de gravar. Qualquer alteração a um registo chama `touch()`. Cópias de
   conflito do OneDrive (`caderno-dados-*.json`) aparecem em `CONFLITOS`.
-- Coaching (`STATE.coach`, ligado por omissão): botão "Coaching" na reunião abre `#coach` (`coachPanel`: foco,
+- **Agenda** (`STATE.agenda`, rotas `#/agenda`, `#/plano/ID`): reuniões planeadas (manual ou `.ics` do Outlook via
+  `importICS`/`parseICS`, escolhido ou deixado em `entrada/`); `briefingFor` junta o que me devem, o que devo, em aberto e
+  decisões com as pessoas/projeto; `planICS`/`icsFile` geram o .ics (linhas dobradas por bytes), `mailtoHref` o email.
+  `planForMeeting` liga a ata à reunião planeada (`rec.plano`) e põe a agenda no pedido. `STATE.contactos` = emails
+  aprendidos do .ics.
+- **Editar/acrescentar** (`#dlg`, `itemForm`, `openAddTask`): itens com id próprio; apagar regista em `apagados`;
+  `mergeState` junta itens por id em todas as listas (união). Tarefas sem reunião ficam no registo escondido
+  `avulsas` (`avulsasRec`, `AVULSAS`, fora da lista de reuniões). `followUpText` = mensagem de seguimento.
+- **Revisão da semana** (`#/semana`, `weekData`), **Decisões** (`#/decisoes`), **Atualizar reunião antiga**
+  (`#/atualizar/ID`, `UPD`, pasta: `entrada/NOME.atualizar.pedido.md` + `STATE.atualizar`), **Prazos .ics** (`tasksICS`).
+- Coaching (`STATE.coach`, ligado por omissão; meta em `STATE.coach_meta`): botão "Coaching" na reunião abre `#coach` (`coachPanel`: foco,
   números com comparação à reunião anterior, Radar, participação) e a vista Evolução; só sobre o dono,
   nunca avalia outras pessoas nem entra na saúde dos projetos.
 - Contexto e seguimento: o pedido inclui reuniões anteriores com as mesmas pessoas e as tarefas

@@ -20,8 +20,10 @@ Atualiza o Caderno de Reuniões: cria um resumo para cada transcrição nova da 
       corrige-o. Se o ficheiro já não estiver na pasta, é porque o caderno já o importou:
       está tudo bem, não o voltes a criar.
 3. Trata também os pedidos sem transcrição, como `entrada/NOME.historico.pedido.md`
-   (reconstrução do histórico de um projeto): se ainda não existir `entrada/NOME.historico.resposta.json`,
-   lê o pedido inteiro, segue-o à letra e cria esse ficheiro só com o JSON pedido.
+   (reconstrução do histórico de um projeto) ou `entrada/NOME.atualizar.pedido.md` (atualizar uma
+   reunião antiga; a transcrição está dentro do pedido): se ainda não existir o `.resposta.json`
+   correspondente, lê o pedido inteiro, segue-o à letra e cria esse ficheiro só com o JSON pedido.
+   Ignora os ficheiros `.ics` (são lidos pelo caderno).
 4. Trata as transcrições e os pedidos um de cada vez, até não haver mais.
 5. Não alteres, não movas e não apagues nenhum outro ficheiro. O caderno importa as respostas
    e arruma a pasta sozinho na próxima vez que estiver aberto.
