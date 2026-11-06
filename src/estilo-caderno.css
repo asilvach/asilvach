@@ -106,3 +106,57 @@ details.panel > summary::-webkit-details-marker { display: none; }
 .legend > span { display: inline-flex; align-items: center; gap: var(--s-2); }
 .panel-head h2 { flex-shrink: 0; max-width: 100%; }
 @media (max-width: 60rem) { .panel-head { flex-direction: column; align-items: flex-start; gap: var(--s-1); } }
+
+/* ── v8: itens com evidência, revisão antes de guardar, nota rápida ── */
+.sec-sub { margin: calc(-1 * var(--s-3)) 0 var(--s-4); color: var(--ink-3); font-size: var(--t-sm); }
+.r-sec h2 .count { font-size: var(--t-sm); color: var(--ink-3); font-weight: 500; margin-left: var(--s-1); }
+.item-row { display: flex; gap: var(--s-3); align-items: flex-start; padding: var(--s-3) 0; border-top: 1px solid var(--line); }
+.item-row:first-of-type { border-top: 0; }
+.item-main { flex: 1; min-width: 0; }
+.item-kind { display: inline-block; margin-right: var(--s-2); font-size: var(--t-xs); font-weight: 600; color: var(--brand-text); }
+.ev { margin: var(--s-1) 0 0; font-size: var(--t-xs); color: var(--ink-3); max-width: var(--measure); }
+.ev q { font-style: italic; quotes: "“" "”"; }
+.ev-t { font-variant-numeric: tabular-nums; font-weight: 600; margin-right: var(--s-2); color: var(--ink-2); }
+.todo-item .ev { padding-left: 30px; flex-basis: 100%; }
+.todo-item { flex-wrap: wrap; }
+.flagged > .item-main > span:not(.item-kind), .todo-item.flagged label > span { text-decoration: underline dotted var(--warn); text-underline-offset: 4px; }
+.flag-why { display: block; margin-top: 2px; font-size: var(--t-xs); color: var(--warn); }
+.confirm-btn { border: 0; background: none; padding: 0 var(--s-1); font-size: var(--t-xs); cursor: pointer; }
+
+.review { margin-top: var(--s-5); }
+.rv-sum { margin: var(--s-5) 0; padding: var(--s-4) var(--s-5); border-radius: var(--r-md); background: var(--fill); }
+.rv-sum p { margin: 0 0 var(--s-2); } .rv-sum p:last-child { margin: 0; }
+.rv-head { display: flex; align-items: center; gap: var(--s-3); margin: var(--s-6) 0 var(--s-2); }
+.rv-head h3 { margin: 0; font-size: var(--t-base); }
+.rv-list { display: grid; gap: var(--s-2); }
+.rv-item { display: flex; gap: var(--s-3); align-items: flex-start; padding: var(--s-3) var(--s-4); border: 1px solid var(--line); border-radius: var(--r-md); background: var(--paper); }
+.rv-item.flag { border-color: color-mix(in oklch, var(--warn) 45%, var(--line)); background: color-mix(in oklch, var(--warn-soft) 45%, var(--paper)); }
+.rv-item.off { opacity: .5; }
+.rv-item.off .rv-main { text-decoration: line-through; }
+.rv-keep input, .rv-concl > input { width: 18px; height: 18px; margin-top: 9px; accent-color: var(--brand); }
+.rv-main { flex: 1; min-width: 0; display: grid; gap: var(--s-2); }
+.rv-top { display: grid; grid-template-columns: minmax(0, 190px) minmax(0, 1fr); gap: var(--s-2); }
+.rv-kind { padding-left: var(--s-2); }
+.rv-text { padding-left: var(--s-3); font-weight: 500; }
+.rv-fields { display: none; grid-template-columns: minmax(0, 1fr) minmax(0, 220px); gap: var(--s-2); }
+.rv-item:has(.rv-kind option[value="tarefas"]:checked) .rv-fields, .rv-item:has(.rv-kind option[value="pedidos"]:checked) .rv-fields { display: grid; }
+.rv-fields label { display: grid; gap: 2px; font-size: var(--t-xs); color: var(--ink-3); }
+.rv-fields .text-input { padding-left: var(--s-3); }
+.rv-flag { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s-2); margin: 0; font-size: var(--t-xs); color: var(--warn); }
+.rv-flag .icon { width: 14px; height: 14px; }
+.rv-ok { display: inline-flex; align-items: center; gap: var(--s-1); color: var(--ink-2); cursor: pointer; }
+.rv-ok input { accent-color: var(--brand); }
+.rv-item .ev { margin: 0; }
+.rv-concl { cursor: pointer; }
+
+.switch-row { display: flex; gap: var(--s-3); align-items: flex-start; max-width: var(--measure); cursor: pointer; }
+.switch-row input { width: 18px; height: 18px; margin-top: 3px; accent-color: var(--brand); flex-shrink: 0; }
+.note-text { min-height: 260px; font-family: var(--font-ui); }
+.note-preview { margin: 0; padding-left: var(--s-5); }
+.note-preview li { margin-bottom: var(--s-1); }
+
+@media (max-width: 60rem) {
+  .rv-top, .rv-fields { grid-template-columns: minmax(0, 1fr); }
+  .rv-item { padding: var(--s-3); }
+  .todo-item .ev { padding-left: 0; }
+}

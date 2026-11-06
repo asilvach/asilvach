@@ -2,7 +2,23 @@
 
 Prioridade = valor no dia a dia ÷ esforço. ✅ feito · 🔜 próximo · 💡 ideia
 
-## v4 (atual): caderno autónomo para ambiente fechado
+## v8 (atual): organização pessoal fiável
+
+| | Feature |
+|---|---|
+| ✅ | Resumo com estrutura fixa: objetivo, temas, decisões, as minhas tarefas, à espera de outros, bloqueios, para retomar |
+| ✅ | Tarefas só quando alguém assume; pedidos, propostas e perguntas separados; nada de responsáveis ou prazos inventados |
+| ✅ | Cada item guarda a citação e o minuto; o caderno verifica a citação na transcrição e marca o que é para confirmar |
+| ✅ | Rever antes de guardar (modo pasta e copiar e colar): confirmar, editar, reclassificar ou tirar cada item |
+| ✅ | Tarefas anteriores só fecham com citação e confirmação; data de conclusão registada |
+| ✅ | Nota rápida para reuniões sem transcrição (prefixos D:, T:, E:, ?, B:, R:) |
+| ✅ | Tarefas: "As minhas" e "À espera de outros"; Pessoas mostra o que está à espera de cada um |
+| ✅ | Ctrl K encontra decisões e salta para o minuto |
+| ✅ | Sincronização sem perdas: junção registo a registo, apagados registados, sem importações duplicadas, aviso de falha de escrita, cópias de conflito do OneDrive |
+| ✅ | Coaching opcional (desligado por omissão), sem avaliar outras pessoas; saúde dos projetos só com factos ditos |
+| ✅ | "Cumpridas no prazo" só com data de conclusão; Edge ou Chrome em todas as mensagens |
+
+## v4: caderno autónomo para ambiente fechado
 
 | | Feature |
 |---|---|

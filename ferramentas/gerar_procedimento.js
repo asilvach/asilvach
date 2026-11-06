@@ -12,7 +12,9 @@ const PORT = 8790 + Math.floor(Math.random() * 100);
 const URL = `http://127.0.0.1:${PORT}/${encodeURIComponent('Caderno de Reuniões.html')}`;
 const VTT = fs.readdirSync(path.join(ROOT, 'src', 'exemplos')).filter(f => f.endsWith('.vtt')).map(f => path.join(ROOT, 'src', 'exemplos', f))[0];
 const EX = JSON.parse(fs.readFileSync(path.join(ROOT, 'src', 'exemplos.json'), 'utf8')).find(e => e.id === 'exemplo-negociacao-fornecedor').conteudo;
-const RESPOSTA = { tipo: 'Intenção', ...EX, tarefas: EX.tarefas.map(({ feito, ...t }) => t) };
+// Resposta do Kilo Code simulada a partir do exemplo fictício (sem os campos que só o caderno acrescenta)
+const clean = it => { const { feito, ev, id, dito_por, concluida_em, ...x } = it; return x; };
+const RESPOSTA = { ...EX, ...Object.fromEntries(['decisoes', 'tarefas', 'pedidos', 'propostas', 'perguntas', 'bloqueios', 'retomar'].map(k => [k, (EX[k] || []).map(clean)])) };
 const LOGO = fs.readFileSync(path.join(ROOT, 'marca', 'natixis-cib.svg'), 'utf8');
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
@@ -47,11 +49,18 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await p.click('[data-inbox-who][data-alias="Silva, R."]'); await sleep(5200);
     await snap('pronta', 'section[aria-labelledby=pasta-h]');
     await put('2026-11-04 Fornecedor pagamentos.resposta.json', JSON.stringify(RESPOSTA, null, 2)); await sleep(14000);
-    const id = await p.evaluate(() => document.querySelector('.m-item')?.dataset.id);
-    await p.goto(URL + '#/r/' + encodeURIComponent(id)); await sleep(500);
+    await p.evaluate(() => { location.hash = '#/'; }); await sleep(600); // só o hash: recarregar perde a pasta simulada
+    await snap('rever-aviso', 'section[aria-labelledby=pasta-h]');
+    await p.click('a[href^="#/rever/"]'); await sleep(1500);
+    await top('.rv-list'); await snap('rever');
+    await p.click('form[data-form=review] [type=submit]'); await sleep(1500);
     await snap('reuniao');
-    await top('#pa-h'); await snap('plano', 'section[aria-labelledby=pa-h]');
+    await top('#wt-h'); await snap('espera', 'section[aria-labelledby=wt-h]');
     await p.goto(URL + '#/tarefas'); await sleep(400); await snap('tarefas');
+    await p.goto(URL + '#/nota'); await sleep(400);
+    await p.fill('#n-titulo', 'Revisão de SLA (presencial)'); await p.fill('#n-pessoas', 'Pedro Alves');
+    await p.fill('#n-texto', 'Tempos de resposta dentro do previsto, exceto em outubro.\nD: Manter o SLA de 4 horas\nT: Enviar o relatório mensal até 20/11\nE: Pedro Alves — mandar os números de outubro\n?: Quem aprova as exceções?'); await sleep(300);
+    await top('form[data-form=note]'); await snap('nota');
     await p.goto(URL + '#/p/exemplo'); await sleep(600); await snap('projeto');
     await top('#mta-h'); await sleep(100); await snap('mta', 'section[aria-labelledby=mta-h]');
     // Plano B: copiar e colar
@@ -60,7 +69,7 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     await top('[aria-labelledby=st-1]'); await snap('b1', 'section[aria-labelledby=st-1]');
     await p.click('[data-action=copy-prompt]'); await sleep(3000);
     await p.fill('#answer', JSON.stringify(RESPOSTA, null, 2)); await sleep(500);
-    await top('[aria-labelledby=st-4]'); await snap('b4', 'section[aria-labelledby=st-4]');
+    await top('[aria-labelledby=st-3]'); await snap('b3', 'section[aria-labelledby=st-3]');
 
     const img = (k, alt) => `<figure><img src="${shots[k]}" alt="${alt}"></figure>`;
     const html = `<!DOCTYPE html><html lang="pt-PT"><head><meta charset="utf-8"><title>Procedimento - Caderno de Reuniões</title><style>
@@ -84,23 +93,23 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
     </style></head><body>
     <div class="cover"><div class="logo">${LOGO}</div>
       <div><div class="bar"></div><h1>Caderno de Reuniões</h1><p>Procedimento de utilização</p><p>CIO Office Portugal</p></div>
-      <small>Transforma as transcrições do Teams em atas, tarefas e coaching de comunicação, com o Kilo Code. Funciona no teu PC, sem internet.</small></div>
+      <small>O teu caderno de reuniões: o que se decidiu, o que tens de fazer e o que está à espera de outras pessoas, com a frase da transcrição que o prova. Funciona no teu PC, sem internet.</small></div>
 
     <section><h2>Em resumo</h2>
       <p>Depois de preparado (uma vez, 5 minutos), cada reunião são três gestos:</p>
-      <div class="flow"><div><b>1. Teams</b>Transfere a transcrição para a pasta <code>entrada</code>.</div><div><b>2. Kilo Code</b>Duplo clique em <b>Atualizar caderno</b> (ou “atualiza o caderno” no VS Code).</div><div><b>3. Caderno</b>Abre-o: a reunião aparece sozinha, com ata, tarefas e o teu Radar.</div></div>
-      <p style="margin-top:4mm">O caderno e o Kilo Code não comunicam diretamente: trocam ficheiros na pasta <code>entrada</code>. O Kilo Code lê a transcrição e escreve a resposta; o caderno importa-a e arruma tudo em <code>entrada/processadas</code>. O caderno não precisa de estar aberto enquanto o Kilo Code trabalha.</p></section>
+      <div class="flow"><div><b>1. Teams</b>Transfere a transcrição para a pasta <code>entrada</code>.</div><div><b>2. Kilo Code</b>Duplo clique em <b>Atualizar caderno</b> (ou “atualiza o caderno” no VS Code).</div><div><b>3. Caderno</b>Abre-o, revê o que o Kilo Code encontrou e guarda.</div></div>
+      <p style="margin-top:4mm">O caderno e o Kilo Code não comunicam diretamente: trocam ficheiros na pasta <code>entrada</code>. O Kilo Code lê a transcrição e escreve a resposta; tu revês e o caderno guarda e arruma tudo em <code>entrada/processadas</code>. O caderno não precisa de estar aberto enquanto o Kilo Code trabalha.</p></section>
 
     <section><h2><span class="n">0</span>Preparar (uma vez)</h2>
       <ol><li>Copia a pasta <b>Caderno de Reuniões</b> do ZIP para o teu <b>OneDrive</b> (ex.: Documentos).</li>
-        <li>Abre <b>Caderno de Reuniões.html</b> com o <b>Microsoft Edge</b>: botão direito no ficheiro, Abrir com, Microsoft Edge. Guarda-o nos favoritos.</li>
+        <li>Abre <b>Caderno de Reuniões.html</b> com o <b>Microsoft Edge</b> ou o <b>Google Chrome</b>: botão direito no ficheiro, Abrir com. Guarda-o nos favoritos.</li>
         <li>Escreve o teu nome e clica em <b>Guardar</b>.</li></ol>
       ${img('inicio', 'Ecrã inicial')}</section>
 
     <section class="break"><h2><span class="n">0</span>Ligar a pasta do caderno</h2>
-      <p>Clica em <b>Escolher a pasta do caderno</b> e escolhe a pasta <b>Caderno de Reuniões</b> (a que contém este ficheiro). Confirma <b>Permitir</b> quando o Edge perguntar. As reuniões passam a ficar guardadas no ficheiro <code>caderno-dados.json</code> dessa pasta.</p>
+      <p>Clica em <b>Escolher a pasta do caderno</b> e escolhe a pasta <b>Caderno de Reuniões</b> (a que contém este ficheiro). Confirma <b>Permitir</b> quando o navegador perguntar. As reuniões passam a ficar guardadas no ficheiro <code>caderno-dados.json</code> dessa pasta.</p>
       ${img('ligar', 'Ligar a pasta')}
-      <p class="tip">Noutro dia, o Edge pode pedir para <b>Voltar a ligar a pasta</b>. É um clique.</p></section>
+      <p class="tip">Noutro dia, o navegador pode pedir para <b>Voltar a ligar a pasta</b>. É um clique.</p></section>
 
     <section><h2><span class="n">0</span>Escolher como usar o Kilo Code</h2>
       <table><tr><td>Sem abrir nada (recomendado)</td><td>Na pasta do caderno, faz <b>duplo clique em “Atualizar caderno.bat”</b>. Abre-se uma janela preta: o Kilo Code trata das transcrições novas e, no fim, abre o caderno. Usa o Kilo Code do terminal.</td></tr>
@@ -119,40 +128,46 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
       <p>Com o caderno aberto, vês o estado na caixa de entrada:</p>
       ${img('pronta', 'Transcrição pronta')}</section>
 
-    <section class="break"><h2><span class="n">3</span>A reunião aparece no caderno</h2>
-      <p>Abre o caderno (ou espera uns segundos, se já estiver aberto): ele importa a resposta e mostra <b>Nova reunião importada</b>. Cada reunião tem: resumo, contexto (ligação a reuniões anteriores), temas com os minutos, decisões, plano de ação, participação de cada pessoa, o teu Radar de Comunicação e a transcrição completa.</p>
-      ${img('reuniao', 'Uma reunião no caderno')}</section>
+    <section class="break"><h2><span class="n">3</span>Rever antes de guardar</h2>
+      <p>Abre o caderno (ou espera uns segundos, se já estiver aberto). A reunião aparece no Início como <b>pronta a rever</b>:</p>
+      ${img('rever-aviso', 'Reunião pronta a rever')}
+      <p>Clica em <b>Rever</b>. Cada item mostra o tipo, o texto, a pessoa, o prazo e a frase da transcrição em que foi dito, com o minuto. Podes mudar o tipo (por exemplo, de tarefa para proposta), corrigir o texto, a pessoa e o prazo, ou desmarcar o que não queres guardar. Os itens marcados <b>A confirmar</b> são os que o Kilo Code não tinha a certeza: ninguém assumiu claramente, o prazo não foi dito ou a frase não aparece na transcrição.</p>
+      ${img('rever', 'Rever antes de guardar')}
+      <p class="tip">Uma tarefa só existe quando alguém a assumiu. Um pedido a quem não respondeu fica como <b>pedido</b>; uma ideia sem acordo fica como <b>proposta</b>. Tarefas anteriores só são fechadas se as confirmares.</p></section>
 
-    <section><h2>Tarefas e atas</h2>
-      <ul><li>Marca as tarefas quando estiverem feitas. Se numa reunião seguinte se disser que algo foi feito, o caderno fecha-a sozinho.</li>
-        <li><b>Copiar ata</b> copia a ata pronta para colar num email ou no Teams.</li>
-        <li>Os botões com minutos (ex.: <b>01:40</b>) abrem a transcrição nesse momento.</li></ul>
-      ${img('plano', 'Plano de ação')}</section>
+    <section class="break"><h2>A reunião no caderno</h2>
+      <p>Cada reunião tem sempre a mesma estrutura: objetivo, temas, decisões, as minhas tarefas, à espera de outros, bloqueios e para retomar. Os botões com minutos (ex.: <b>01:36</b>) abrem a transcrição nesse momento. <b>Copiar ata</b> copia a ata pronta para colar num email ou no Teams.</p>
+      ${img('reuniao', 'Uma reunião no caderno')}
+      ${img('espera', 'À espera de outros')}</section>
 
-    <section class="break"><h2>Vista Tarefas</h2><p>Junta as ações de todas as reuniões, por prazo. As atrasadas aparecem primeiro.</p>${img('tarefas', 'Vista Tarefas')}</section>
+    <section class="break"><h2>Vista Tarefas</h2><p>Duas listas: <b>As minhas</b> (o que assumiste) e <b>À espera de outros</b> (o que outras pessoas assumiram e os pedidos que lhes fizeste). Ao marcar uma tarefa como feita, o caderno regista a data.</p>${img('tarefas', 'Vista Tarefas')}</section>
+
+    <section class="break"><h2>Reuniões sem transcrição: nota rápida</h2>
+      <p>Para reuniões presenciais ou chamadas sem transcrição: <b>Nova reunião</b>, <b>nota rápida</b>. Escreve à vontade e começa as linhas por <code>D:</code> (decisão), <code>T:</code> (tarefa tua), <code>E: Nome — …</code> (à espera de alguém), <code>?</code> (pergunta), <code>B:</code> (bloqueio) ou <code>R:</code> (retomar). Acaba com “até 20/11” para dar um prazo. Não passa pelo Kilo Code.</p>
+      ${img('nota', 'Nota rápida')}</section>
 
     <section class="break"><h2>Projetos: a evolução ao longo das reuniões</h2>
-      <p>Em <b>Projetos</b>, o caderno acompanha um projeto como um PMO crítico. Cria o projeto (nome, descrição, palavras-chave, pessoas), confirma as reuniões que lhe pertencem e clica em <b>Reconstruir o histórico</b>. A partir daí, cada reunião nova atualiza marcos, backlog, riscos e decisões.</p>
+      <p>Em <b>Projetos</b>, juntas as reuniões de um mesmo assunto. Cria o projeto (nome, descrição, palavras-chave, pessoas), confirma as reuniões que lhe pertencem e clica em <b>Reconstruir o histórico</b>. A página mostra o que mudou desde a última reunião, os compromissos em aberto, os bloqueios e as decisões. A saúde do projeto usa só factos ditos nas reuniões.</p>
       ${img('projeto', 'Página de um projeto')}
       <p class="tip">O caderno também sugere projetos sozinho quando vê a mesma pessoa ou o mesmo tema em 3 ou mais reuniões.</p></section>
 
     <section><h2>Tendência dos marcos</h2>
-      <p>Cada linha é a data prevista de um marco, reunião a reunião. Uma linha plana é um projeto controlado; uma linha a subir é um projeto a escorregar. Os alertas assinalam, por exemplo, quando o estado é dado como verde no mesmo dia em que uma data muda.</p>
+      <p>Cada linha é a data prevista de um marco, reunião a reunião. Uma linha plana é um projeto controlado; uma linha a subir é um projeto a escorregar. Os alertas assinalam, por exemplo, quando alguém disse que o estado era verde no mesmo dia em que uma data mudou.</p>
       ${img('mta', 'Tendência dos marcos')}</section>
 
     <section class="break"><h2>Plano B: copiar e colar</h2>
-      <p>Se o modo pasta não estiver disponível: em <b>Nova reunião</b>, desce até <b>Sem a pasta: copiar e colar</b>, escolhe o ficheiro, clica em <b>Copiar pedido</b>, cola no Kilo Code, copia a resposta e cola-a no passo 4.</p>
-      ${img('b1', 'Plano B, passo 1')}${img('b4', 'Plano B, passo 4')}</section>
+      <p>Se o modo pasta não estiver disponível: em <b>Nova reunião</b>, desce até <b>Sem a pasta: copiar e colar</b>, escolhe o ficheiro, clica em <b>Copiar pedido</b>, cola no Kilo Code, copia a resposta e cola-a no passo 3. Revês os itens no mesmo ecrã e clicas em <b>Guardar reunião</b>.</p>
+      ${img('b1', 'Plano B, passo 1')}${img('b3', 'Plano B, passo 3')}</section>
 
     <section class="break"><h2>Se algo não correr bem</h2><table>
       <tr><td>“Não encontrei o Kilo Code no terminal”</td><td>O Kilo Code do terminal não está instalado neste PC. Usa o VS Code: abre a pasta e escreve “atualiza o caderno”.</td></tr>
       <tr><td>“O Kilo Code não conseguiu terminar”</td><td>Abre o Kilo Code nesta pasta (terminal ou VS Code) e escreve “atualiza o caderno”, para veres o que ele pede.</td></tr>
       <tr><td>O VS Code não mostra o /reuniao</td><td>Confirma que abriste a pasta <b>Caderno de Reuniões</b>. Escreve <code>/reload</code>, ou simplesmente “atualiza o caderno”.</td></tr>
-      <tr><td>O Kilo Code diz para abrir o caderno</td><td>Acontece só antes da primeira utilização: abre o caderno no Edge, liga a pasta e volta a escrever <code>/reuniao</code>.</td></tr>
-      <tr><td>O caderno mostra “resposta não é válida”</td><td>No Kilo Code, escreve outra vez <code>/reuniao</code>. Ele refaz a resposta.</td></tr>
-      <tr><td>“Voltar a ligar a pasta”</td><td>Clica no botão e escolhe <b>Permitir</b>. É uma proteção do Edge.</td></tr>
+      <tr><td>O Kilo Code diz para abrir o caderno</td><td>Acontece só antes da primeira utilização: abre o caderno no Edge ou no Chrome, liga a pasta e volta a escrever <code>/reuniao</code>.</td></tr>
+      <tr><td>O caderno mostra “resposta não é válida”, ou a resposta é fraca</td><td>No ecrã de revisão, clica em <b>Pedir outra resposta ao Kilo Code</b> e escreve outra vez <code>/reuniao</code>.</td></tr>
+      <tr><td>“Voltar a ligar a pasta” ou “Não gravado na pasta”</td><td>Clica no aviso e escolhe <b>Permitir</b>. É uma proteção do navegador. Até lá, os dados ficam neste navegador e são juntados à pasta quando voltares a ligar.</td></tr>
       <tr><td>A página abre em branco</td><td>Abre o ficheiro com o Microsoft Edge ou o Google Chrome.</td></tr>
-      <tr><td>Mudei de PC</td><td>Abre o caderno da pasta do OneDrive e liga outra vez a pasta: as reuniões estão no <code>caderno-dados.json</code>.</td></tr>
+      <tr><td>Mudei de PC ou tenho duas janelas abertas</td><td>Abre o caderno da pasta do OneDrive e liga outra vez a pasta: as reuniões estão no <code>caderno-dados.json</code>. As alterações de cada lado são juntadas, sem se apagarem. Se o OneDrive criar uma cópia em conflito, o caderno oferece-se para a juntar.</td></tr>
       <tr><td>Quero uma cópia de segurança</td><td>Definições, <b>Descarregar cópia</b>.</td></tr></table></section>
 
     <section><h2>Confidencialidade</h2><ul>

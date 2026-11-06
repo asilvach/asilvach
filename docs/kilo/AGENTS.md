@@ -8,7 +8,7 @@ dia", "processa as reuniões" ou "trata das transcrições", segue exatamente o 
 ficheiro `.kilo/commands/reuniao.md`.
 
 ## Regras
-- `Caderno de Reuniões.html` é a aplicação (abre no Edge). Nunca a alteres: as reuniões não
+- `Caderno de Reuniões.html` é a aplicação (abre no Edge ou no Chrome). Nunca a alteres: as reuniões não
   entram no HTML, entram pela pasta `entrada/` e o caderno importa-as.
 - `caderno-dados.json` guarda as reuniões. Não o alteres.
 - `instrucoes-para-o-kilo.md` é gerado pelo caderno. Lê-o, mas não o alteres.

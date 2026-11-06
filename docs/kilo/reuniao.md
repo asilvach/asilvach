@@ -12,7 +12,7 @@ Atualiza o Caderno de Reuniões: cria um resumo para cada transcrição nova da 
       (foi preparado pelo caderno e tem as métricas exatas).
    b. Se não existir, lê `instrucoes-para-o-kilo.md` (na raiz desta pasta) e a transcrição
       inteira, e segue essas instruções à letra.
-      Se `instrucoes-para-o-kilo.md` não existir, para e diz: "Abre o Caderno de Reuniões no Edge
+      Se `instrucoes-para-o-kilo.md` não existir, para e diz: "Abre o Caderno de Reuniões (Edge ou Chrome)
       e liga a pasta uma vez (botão Escolher a pasta do caderno). Depois volta a pedir."
    c. Cria `entrada/NOME.resposta.json` com APENAS o objeto JSON pedido
       (sem texto antes ou depois, sem blocos de código).
@@ -26,6 +26,8 @@ Atualiza o Caderno de Reuniões: cria um resumo para cada transcrição nova da 
 5. Não alteres, não movas e não apagues nenhum outro ficheiro. O caderno importa as respostas
    e arruma a pasta sozinho na próxima vez que estiver aberto.
 6. No fim, responde numa linha por reunião: o título e o número de tarefas. Lembra que a
-   reunião aparece no caderno quando ele estiver aberto no Edge.
+   reunião aparece no caderno, pronta a rever, quando ele estiver aberto (Edge ou Chrome).
+7. Nunca inventes responsáveis, prazos, conclusões nem decisões: segue as regras do pedido e
+   marca em "confirmar" o que não for claro. O caderno verifica cada citação na transcrição.
 
 Indicação extra do utilizador (opcional, por exemplo um tipo de resumo): $ARGUMENTS

@@ -3,15 +3,16 @@ CADERNO DE REUNIÕES · CIO OFFICE PORTUGAL
 
 O que é
 -------
-Um caderno pessoal para as tuas reuniões do Teams: atas, decisões, tarefas,
-quem falou quanto e dicas sobre a tua comunicação. Funciona no teu PC, sem
-internet e sem instalar nada. O Kilo Code faz os resumos.
+Um caderno pessoal para as tuas reuniões: o que se decidiu, o que tens de
+fazer e o que está à espera de outras pessoas, com a frase da transcrição que
+o prova. Funciona no teu PC, sem internet e sem instalar nada. O Kilo Code faz
+os resumos e tu revês antes de guardar.
 
 Preparar (uma vez, 5 minutos)
 -----------------------------
 1. Copia esta pasta "Caderno de Reuniões" para o teu OneDrive (ex.: Documentos).
-2. Abre "Caderno de Reuniões.html" com o Microsoft Edge
-   (botão direito > Abrir com > Microsoft Edge). Escreve o teu nome.
+2. Abre "Caderno de Reuniões.html" com o Microsoft Edge ou o Google Chrome
+   (botão direito > Abrir com). Escreve o teu nome.
 3. No caderno, clica em "Escolher a pasta do caderno" e escolhe esta pasta.
 4. Escolhe como vais usar o Kilo Code:
    - Sem abrir nada: duplo clique em "Atualizar caderno.bat" (usa o Kilo Code
@@ -24,14 +25,21 @@ Em cada reunião
    Guarda o ficheiro na pasta "entrada".
 2. Duplo clique em "Atualizar caderno.bat".
    (Ou, no Kilo Code do VS Code, escreve "atualiza o caderno".)
-3. O caderno abre sozinho no fim, com a reunião nova.
+3. O caderno abre sozinho no fim. A reunião aparece como "pronta a rever":
+   confirma, corrige ou tira o que não estiver certo e clica em "Guardar reunião".
+
+Reuniões sem transcrição (presenciais, chamadas)
+-------------------------------------------------
+No caderno, "Nova reunião" > "nota rápida". Começa as linhas por D: (decisão),
+T: (tarefa tua), E: Nome — ... (à espera de alguém), ? (pergunta), B: (bloqueio)
+ou R: (retomar).
 
 Projetos (acompanhamento de PMO)
 --------------------------------
 Em "Projetos", cria um projeto (ex.: o nome do projeto e as pessoas com quem
 o acompanhas), confirma as reuniões e clica em "Reconstruir o histórico".
-O caderno mostra a evolução: datas dos marcos, backlog, riscos, decisões
-por tomar, satisfação, alertas e perguntas para a próxima reunião.
+O caderno mostra o que mudou desde a última reunião, os compromissos em aberto,
+os bloqueios, as decisões por tomar e a evolução das datas dos marcos.
 Há um projeto de exemplo para veres como fica.
 
 Para experimentar: copia o ficheiro da pasta "Exemplo para experimentar"

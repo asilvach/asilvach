@@ -2,15 +2,18 @@
 
 Ferramenta da equipa para um banco com IA interna fechada (Kilo Code) e sem acesso externo.
 O caderno é **um só ficheiro HTML** que corre offline no Edge/Chrome. Não há Python, servidor
-nem agente: o caderno lê o `.vtt`/`.docx` do Teams, calcula as métricas, gera o pedido para o
-Kilo Code, valida a resposta (JSON) que a pessoa cola de volta e guarda tudo localmente.
+nem agente: o caderno lê o `.vtt`/`.docx` do Teams, gera o pedido para o Kilo Code, valida a
+resposta (JSON), verifica as citações na transcrição, mostra tudo para rever e guarda localmente.
+É uma ferramenta de **organização pessoal** (decisões, as minhas tarefas, o que está à espera de
+outros), não de gestão de equipas.
 
 ## Arquitetura
 - **Modo pasta (principal):** a pessoa liga a pasta do caderno (File System Access API). O caderno
   vigia `entrada/` a cada 4 s: por cada transcrição escreve `NOME.pedido.md` (pergunta "quem és tu"
   se não reconhecer a pessoa); no Kilo Code, `/reuniao` (`.kilo/commands/reuniao.md` e
   `.kilocode/workflows/reuniao.md`) escreve `NOME.resposta.json`; o caderno espera 8 s de
-  estabilidade, valida, importa, guarda em `caderno-dados.json` e move tudo para `entrada/processadas`.
+  estabilidade, valida e mostra-a em "Prontas a rever" (`INBOX.rever`, rota `#/rever/NOME`). Só depois
+  de rever (`loadInboxDraft` → `reviewForm` → `saveInboxDraft`) guarda e move tudo para `entrada/processadas`.
   `STATE.fila` guarda os pedidos pendentes e `STATE.importados` evita importar duas vezes.
   O Kilo Code também trabalha com o caderno fechado: lê `instrucoes-para-o-kilo.md` (gerado pelo
   caderno sempre que guarda: dono, aliases, reuniões recentes, tarefas pendentes com códigos `T-<key>`)
@@ -20,19 +23,32 @@ Kilo Code, valida a resposta (JSON) que a pessoa cola de volta e guarda tudo loc
   sem `--auto`) e abre o caderno no fim. `kilo.jsonc` (CLI e extensão VS Code) só permite escrever
   `entrada/*.resposta.json` e nega bash/webfetch/websearch.
 - **Plano B (copiar e colar):** Nova reunião → escolhe o ficheiro e quem é → Copiar pedido → cola no
-  Kilo Code → cola a resposta → Guardar reunião.
+  Kilo Code → cola a resposta → revê → Guardar reunião.
+- **Nota rápida** (`#/nota`, `parseQuickNote`): reuniões sem transcrição, sem IA; prefixos D:, T:, E:, ?, B:, R:.
+- **Formato 2 da resposta** (`conteudo.v = 2`): `objetivo`, `temas`, listas `decisoes`, `tarefas` (só ações
+  assumidas; `responsavel`), `pedidos` (`para`), `propostas`, `perguntas`, `bloqueios`, `retomar`; cada item com
+  `citacao`, `minuto`, `confirmar` (motivo). `checkEvidence` procura a citação na transcrição (`findQuote`),
+  corrige o minuto e marca o que tem de ser confirmado. `finishDraft` aplica a revisão (ids próprios).
+  `tarefas_concluidas` só fecham tarefas confirmadas na revisão (`concluida_em`, `evidencia_conclusao`).
+  Reuniões antigas (sem `v`) continuam a abrir no formato antigo (`seccoes`).
 - Métricas (tempo de fala, ritmo, bordões, hesitações, interrupções) calculadas em JS a partir
   dos timestamps. O modelo de IA só escreve o conteúdo (resumo, secções, tarefas, temas, radar).
 - Armazenamento: IndexedDB do navegador + `caderno-dados.json` na pasta ligada (ex.: OneDrive).
-  Exportar/importar cópia nas Definições.
+  Exportar/importar cópia nas Definições. **Nunca sobrescrever:** `persist` relê o ficheiro e junta
+  (`mergeState`: por id, ganha `alterado_em` mais recente; `apagados` = marcas de apagado; `origem` evita
+  importações duplicadas) antes de gravar. Qualquer alteração a um registo chama `touch()`. Cópias de
+  conflito do OneDrive (`caderno-dados-*.json`) aparecem em `CONFLITOS`.
+- Coaching (`STATE.coaching`, desligado por omissão): Radar, Evolução e participação; só sobre o dono,
+  nunca avalia outras pessoas nem entra na saúde dos projetos.
 - Contexto e seguimento: o pedido inclui reuniões anteriores com as mesmas pessoas e as tarefas
   em aberto (códigos T1…); a resposta indica `tarefas_concluidas` e o caderno fecha-as.
 - **Projetos (PMO):** `STATE.projetos` (nome, descrição, palavras, pessoas); `rec.projeto` associa a
   reunião. A resposta da IA traz `pmo` (estado RAG, marcos, backlog, riscos, decisões pendentes,
-  satisfação, adoção, perguntas) com códigos estáveis M/B/R/D; `assignCodes` reconhece itens pelo
+  satisfação, adoção, perguntas) com códigos estáveis M/B/R/D; um campo não dito fica `null` e não muda
+  o estado (`PMO_FIRST` só na primeira menção); estado/satisfação/adoção só quando ditos, com citação; `assignCodes` reconhece itens pelo
   título quando falta o código. `projectMetrics` calcula a linha do tempo e os alertas (melancia,
   deriva de marcos, dores crónicas, itens reabertos, decisões arrastadas, ações repetidas/zombie,
-  backlog que não converge, satisfação a descer, linguagem hesitante). "Reconstruir o histórico"
+  backlog que não converge). A saúde usa só factos ditos; satisfação e adoção são indicadores à parte. "Reconstruir o histórico"
   gera `entrada/NOME.historico.pedido.md` (ou copiar-colar) a partir das atas guardadas.
   `src/exemplo-projeto.json` é o projeto de exemplo (#/p/exemplo).
 - Segurança: CSP sem rede (`connect-src 'none'`), sem dependências externas, logótipo embutido.

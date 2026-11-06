@@ -45,6 +45,14 @@ Dados
 - Localização: perfil do navegador do utilizador e, se configurado, o ficheiro
   .json na pasta escolhida pelo utilizador (ex.: OneDrive empresarial).
 - Partilha: nenhuma automática. Cada utilizador tem o seu próprio caderno.
+- Revisão: as respostas do Kilo Code não entram sozinhas. O utilizador revê cada
+  item (com a frase da transcrição que o sustenta) antes de guardar.
+- Sincronização: se o mesmo caderno for aberto em mais de um PC ou janela, as
+  alterações são juntadas registo a registo antes de cada gravação (nada é
+  sobrescrito por uma cópia antiga). Cópias de conflito do OneDrive
+  (caderno-dados-*.json) são detetadas e podem ser juntadas.
+- Coaching de comunicação: opcional e desligado por omissão. Só analisa o
+  próprio utilizador; não avalia outras pessoas.
 - Apagar: Definições > Apagar todas as reuniões; e apagar o ficheiro .json.
 
 Requisitos
